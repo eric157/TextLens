@@ -1,5 +1,4 @@
 import streamlit as st
-from transformers import pipeline
 import pandas as pd
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
@@ -13,9 +12,6 @@ import plotly.express as px
 import spacy
 from collections import Counter
 from textstat import flesch_reading_ease
-#from sumy.parsers.plaintext import PlaintextParser #REMOVED
-#from sumy.nlp.tokenizers import Tokenizer #REMOVED
-#from sumy.summarizers.lex_rank import LexRankSummarizer #REMOVED
 from heapq import nlargest
 
 # --- Page Settings ---
@@ -60,33 +56,36 @@ nlp = load_spacy_model()
 
 # --- Functions ---
 
-@st.cache_resource
-def load_sentiment_pipeline():
-    return pipeline("sentiment-analysis")
+#Removed pipeline
+#@st.cache_resource
+#def load_sentiment_pipeline():
+#    return pipeline("sentiment-analysis")
 
-@st.cache_resource
-def load_emotion_pipeline():
-    return pipeline("text-classification", model="SamLowe/roberta-base-go_emotions")
+#@st.cache_resource
+#def load_emotion_pipeline():
+#    return pipeline("text-classification", model="SamLowe/roberta-base-go_emotions")
 
 @st.cache_resource
 def load_keyword_pipeline():
     return pipeline("text2text-generation", model="google/flan-t5-base")
 
 def analyze_sentiment(text):
-    try:
-        sentiment_result = load_sentiment_pipeline()(text[:512])
-        return sentiment_result[0]
-    except Exception as e:
+   try:
+        analysis = TextBlob(text)
+        polarity = analysis.sentiment.polarity
+        if polarity > 0.1:
+            return {"label": "Positive", "score": polarity}
+        elif polarity < -0.1:
+            return {"label": "Negative", "score": polarity}
+        else:
+            return {"label": "Neutral", "score": polarity}
+   except Exception as e:
         st.error(f"Error during sentiment analysis: {e}")
         return {"label": "Error", "score": 0.0}
 
+#No emotion analysis as it used transformer pipeline
 def analyze_emotions(text):
-    try:
-        emotions_result = load_emotion_pipeline()(text[:512])
-        return emotions_result
-    except Exception as e:
-        st.error(f"Error during emotion analysis: {e}")
-        return [{"label": "Error", "score": 0.0}]
+    return {"label": "Not Available", "score": 0.0}
 
 def extract_keywords(text):
     try:
@@ -400,7 +399,7 @@ with tab1:  # Text Analysis
                 if sentiment_result['label'] == "Error":
                     st.error("Sentiment Analysis Failed")
                 else:
-                    st.metric("Sentiment", value=sentiment_result['label'], delta=sentiment_result['score'])
+                    st.metric("Sentiment", value=sentiment_result['label'], delta=round(sentiment_result['score'], 2))
 
                 with st.expander("📌 TextBlob Sentiment Analysis"):
                     st.metric("Polarity", value=round(textblob_sentiment[0], 2))
@@ -409,8 +408,8 @@ with tab1:  # Text Analysis
             with col2:
                 st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>💖 Emotion Classification</h3>",
                             unsafe_allow_html=True)
-                for emotion in emotion_result:
-                    st.metric(emotion['label'], value=round(emotion['score'], 2))
+                st.write("Emotion Classification does not work on streamlit cloud as it needs more resources, feel free to run locally!")
+                #st.metric(emotion['label'], value=round(emotion['score'], 2))
 
             st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>🔑 Keyword Extraction</h3>",
                         unsafe_allow_html=True)
