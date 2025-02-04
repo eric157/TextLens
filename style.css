@@ -1,0 +1,301 @@
+/* style.css */
+
+/* Import a modern, tech-inspired font */
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap');
+
+/* High-Tech & Colorful Palette */
+:root {
+  --primary: #6CFFD9;        /* Cyan-Green (Intense) */
+  --secondary: #FF69B4;      /* Hot Pink (Vibrant) */
+  --background: #121212;     /* Dark Background (Almost Black) */
+  --text: #FFFFFF;           /* White (Maximum Contrast) */
+  --accent: #FFD700;         /* Gold (Highlight) */
+  --card_background: #282828;  /* Darker Gray */
+  --grey_text: #B0B0B0;      /* Medium Gray */
+  --gradient_start: #4A148C;  /* Dark Purple (Gradient Start) */
+  --gradient_end: #E91E63;    /* Magenta (Gradient End) */
+}
+
+/* General Body Styles */
+body {
+  background-color: var(--background);
+  color: var(--text);
+  font-family: 'Rajdhani', sans-serif; /* Modern font */
+  line-height: 1.6;
+  overflow-x: hidden; /* Prevent horizontal scrolling */
+}
+
+/* Streamlit App Container */
+.stApp {
+  background-color: var(--background);
+  animation: fadeIn 1s ease-out forwards; /* Initial Fade-In */
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Text Color Adjustments */
+.st-emotion-cache-10tr677,
+.st-emotion-cache-1x63k98,
+.st-emotion-cache-1v0mbdr {
+  color: var(--text);
+}
+
+/* Background Color Adjustments */
+.st-emotion-cache-r421ms,
+.st-emotion-cache-1dm1mcz,
+.st-emotion-cache-1b2590p,
+[data-baseweb="base-input"] {
+  background-color: var(--card_background);
+  border: none;
+}
+
+/* Text Area Styling */
+textarea[data-streamlit="text-area"] {
+  color: var(--text) !important;
+  background-color: var(--card_background);
+  border: 2px solid var(--primary);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 18px;
+  box-shadow: 0 0 12px rgba(108, 255, 217, 0.5);
+  transition: box-shadow 0.3s ease;
+}
+
+textarea[data-streamlit="text-area"]::placeholder {
+  color: var(--grey_text) !important;
+  opacity: 0.7;
+}
+
+textarea[data-streamlit="text-area"]:focus {
+    box-shadow: 0 0 16px rgba(var(--primary-rgb), 0.8);
+    border-color: var(--accent);
+}
+
+/* Title Styling */
+h1 {
+    color: var(--primary);
+    text-align: center;
+    font-size: 3.5em;
+    font-weight: 700;
+    margin-bottom: 0.5em;
+    text-shadow: 3px 3px 10px rgba(108, 255, 217, 0.7);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    animation: pulseTitle 5s infinite alternate;
+    /*Removed slideInFromLeft and h1::after for the initial animation*/
+}
+
+
+@keyframes pulseTitle {
+  0% { text-shadow: 3px 3px 10px rgba(108, 255, 217, 0.7); }
+  100% { text-shadow: 3px 3px 15px rgba(108, 255, 217, 0.9); }
+}
+
+
+/* Subheader Styling */
+h3 {
+  color: var(--secondary);
+  font-size: 2em;
+  font-weight: 600;
+  margin-top: 1.2em;
+  margin-bottom: 0.6em;
+  border-bottom: 3px solid var(--accent);
+  padding-bottom: 0.3em;
+  text-shadow: 1px 1px 5px rgba(255, 105, 180, 0.6);
+  transition: color 0.3s ease, transform 0.3s ease; /* Smooth transition */
+}
+
+h3:hover {
+    color: var(--accent); /* Accent color on hover */
+    transform: translateY(-2px); /* Slight lift effect */
+}
+
+/* Metric Styles */
+.stMetricValue {
+  font-size: 1.8em;
+  color: var(--accent);
+  font-weight: 600;
+  transition: color 0.3s ease; /* Smooth transition */
+}
+.stMetricValue:hover {
+    color: var(--primary);
+}
+
+/* Sidebar Styles */
+[data-testid="stSidebar"] {
+  background-color: var(--card_background);
+  color: var(--text);
+  border-right: 2px solid var(--primary);
+  animation: slideInFromRight 0.8s ease-out; /* Sidebar Animation */
+}
+
+@keyframes slideInFromRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+  color: var(--primary);
+}
+
+/* Button Styles */
+.stButton>button {
+  background: linear-gradient(to right, var(--gradient_start), var(--gradient_end));
+  color: var(--text);
+  border: none;
+  border-radius: 10px;
+  padding: 14px 28px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  box-shadow: 0 4px 12px rgba(233, 30, 99, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.stButton>button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 15px rgba(233, 30, 99, 0.8);
+}
+
+/* File Uploader Styles */
+.stFileUploader {
+  border: 3px dashed var(--secondary);
+  border-radius: 10px;
+  padding: 24px;
+  text-align: center;
+  background-color: var(--card_background);
+  transition: border-color 0.3s ease, transform 0.3s ease; /* Smooth transition */
+}
+
+.stFileUploader:hover {
+    border-color: var(--accent); /* Gold on Hover */
+    transform: scale(1.03); /* Slight enlargement */
+}
+.stFileUploader label {
+  color: var(--text);
+  transition: color 0.3s ease;
+}
+.stFileUploader div p {
+    color: var(--grey_text);
+}
+
+.stFileUploader input[type="file"] {
+    color: var(--primary);
+    transition: color 0.3s ease;
+}
+
+/* Dataframe Styles */
+.ag-theme-streamlit {
+  --ag-background-color: var(--card_background);
+  --ag-header-background-color: var(--secondary);
+  --ag-odd-row-background-color: var(--card_background);
+  --ag-even-row-background-color: var(--card_background);
+  --ag-border-color: var(--secondary);
+  --ag-foreground-color: var(--text);
+  --ag-header-foreground-color: var(--text);
+  border: 2px solid var(--primary); /* Electric Cyan-Green Border */
+}
+
+.ag-header-cell-label {
+  color: var(--text) !important; /* Ensure header text color */
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Horizontal Line Styles */
+hr {
+    border: none;
+    height: 4px; /* Increased height */
+    background: linear-gradient(to right, var(--primary), var(--secondary), var(--accent));
+    margin: 1.5em 0; /* Increased margin */
+    border-radius: 5px; /* Rounded corners */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Subtle shadow */
+}
+
+/* Code Block Styles */
+pre {
+  background-color: var(--card_background);
+  color: var(--primary);
+  border: 2px solid var(--secondary);
+  padding: 14px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 16px;
+  transition: border-color 0.3s ease;
+}
+
+pre:hover {
+    border-color: var(--accent); /* Gold on hover */
+}
+
+/* Link Styles */
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 0.3s ease;
+}
+a:hover {
+  text-decoration: underline;
+  color: var(--primary);
+}
+/* Styling Metrics */
+div.stMetricValue > div {
+    font-size: 24px !important;
+    font-weight: 600 !important;
+    color: var(--primary) !important;
+}
+
+div.stMetricLabel {
+    color: var(--grey_text);
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.3em;
+}
+/* Make containers have a rounded border and a shadow */
+[data-testid="stVerticalBlock"] {
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+/* For tabs, give a more pronounced look */
+div[data-baseweb="tab-list"] {
+    background-color: var(--card_background);
+    padding: 10px;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    margin-bottom: 20px;
+}
+
+button[data-baseweb="tab"] {
+    color: var(--text);
+    font-weight: bold;
+    padding: 10px 20px;
+    border-radius: 8px;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+button[data-baseweb="tab"]:hover {
+    background-color: var(--secondary);
+    color: var(--background);
+}
+
+button[aria-selected="true"] {
+    background-color: var(--secondary);
+    color: var(--background);
+}
