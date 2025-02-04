@@ -9,3 +9,4 @@ Pillow
 plotly
 streamlit_extras
 streamlit_option_menu
+emoji
