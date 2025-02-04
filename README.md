@@ -2,8 +2,6 @@
 
 ![Logo](logo.png)  
 
-![Streamlit](https://img.shields.io/badge/Streamlit-%23FE4B4B.svg?style=for-the-badge&logo=streamlit&logoColor=white)  
-
 🌍 **Live Demo**: [TextLens](https://textlens.streamlit.app/)  
 
 ## 🚀 Overview  
