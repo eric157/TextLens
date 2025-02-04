@@ -83,9 +83,28 @@ def analyze_sentiment(text):
         st.error(f"Error during sentiment analysis: {e}")
         return {"label": "Error", "score": 0.0}
 
-#No emotion analysis as it used transformer pipeline
+#Rule-Based Emotion Analysis
 def analyze_emotions(text):
-    return {"label": "Not Available", "score": 0.0}
+    text = text.lower()
+    emotion_keywords = {
+        "joy": ["happy", "joyful", "excited", "delighted", "cheerful"],
+        "sadness": ["sad", "unhappy", "depressed", "gloomy", "sorrowful"],
+        "anger": ["angry", "furious", "irate", "annoyed", "enraged"],
+        "fear": ["afraid", "scared", "nervous", "terrified", "anxious"]
+    }
+    emotion_scores = {}
+    for emotion, keywords in emotion_keywords.items():
+        emotion_scores[emotion] = 0
+        for keyword in keywords:
+            if keyword in text:
+                emotion_scores[emotion] += 1
+
+    if not emotion_scores:
+        return {"label": "Neutral", "score": 0.0}
+
+    most_likely_emotion = max(emotion_scores, key=emotion_scores.get)
+    score = emotion_scores[most_likely_emotion]  # Use the count as a score.
+    return {"label": most_likely_emotion, "score": score}
 
 def extract_keywords(text):
     try:
@@ -329,10 +348,10 @@ with st.sidebar:
     st.title("⚙️ Settings & Info")
     st.markdown("---")
     st.subheader("📌 About the App")
-    st.write("Perform text analysis including sentiment, emotion, and keyword extraction.")
+    st.write("Perform text analysis including sentiment, and keyword extraction.")
     st.markdown("---")
     with st.expander("💡 Model Details"):
-        st.write("This app leverages pre-trained transformer models from the Hugging Face Transformers library.")
+        st.write("This app leverages spaCy for the NLP and TextBlob for sentiment analysis")
     st.markdown("---")
     with st.expander("📖 Usage Guide"):
         st.markdown("""
@@ -414,8 +433,7 @@ with tab1:  # Text Analysis
             with col2:
                 st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>💖 Emotion Classification</h3>",
                             unsafe_allow_html=True)
-                st.write("Emotion Classification does not work on streamlit cloud as it needs more resources, feel free to run locally!")
-                #st.metric(emotion['label'], value=round(emotion['score'], 2))
+                st.metric(emotion_result['label'], value=round(emotion_result['score'], 2))
 
             st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>🔑 Keyword Extraction</h3>",
                         unsafe_allow_html=True)
