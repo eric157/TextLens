@@ -1,13 +1,10 @@
 streamlit
-transformers
 pandas
 matplotlib
 wordcloud
 textblob
 streamlit_lottie
 requests
-Pillow
+pillow
 plotly
 streamlit_extras
-streamlit_option_menu
-emoji
