@@ -11,3 +11,4 @@ spacy
 textstat
 language_tool_python
 sumy
+textblob

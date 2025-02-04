@@ -13,7 +13,6 @@ import plotly.express as px
 import spacy
 from collections import Counter
 from textstat import flesch_reading_ease
-import language_tool_python
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lex_rank import LexRankSummarizer
@@ -53,14 +52,10 @@ def load_spacy_model():
         spacy.cli.download("en_core_web_sm")
         return spacy.load("en_core_web_sm")
 
-# --- Load language tool ---
-@st.cache_resource
-def load_language_tool():
-    return language_tool_python.LanguageTool('en-US')
 
 # --- Load models ---
 nlp = load_spacy_model()
-tool = load_language_tool()
+
 
 # --- Functions ---
 
@@ -279,9 +274,9 @@ def count_keywords(text):
     keyword_counts = Counter(filtered_words).most_common(10)
     return keyword_counts
 
-def check_misspellings(text):
-    matches = tool.check(text)
-    return len(matches)
+#Replaced language_tool_python with TextBlob
+def correct_grammar(text):
+     return str(TextBlob(text).correct())
 
 def count_transition_words(text):
     transition_words = ["however", "therefore", "in addition", "moreover", "consequently", "as a result", "for example"]
@@ -375,7 +370,8 @@ with tab1:  # Text Analysis
             pronoun_counts = count_pronouns(text_input)
             first_person_count, third_person_count = count_first_third_person(text_input)
             keyword_counts = count_keywords(text_input)
-            misspelling_count = check_misspellings(text_input)
+            # Using TextBlob for grammar correction
+            corrected_text = correct_grammar(text_input)
             transition_word_count = count_transition_words(text_input)
             text_summary = summarize_text(text_input)
 
@@ -454,8 +450,8 @@ with tab1:  # Text Analysis
             st.subheader("Keyword Counts")
             st.write(keyword_counts)
 
-            st.subheader("Misspellings Count")
-            st.write(misspelling_count)
+            st.subheader("Corrected Text (Grammar)")
+            st.write(corrected_text)
 
             st.subheader("Transition Word Count")
             st.write(transition_word_count)
