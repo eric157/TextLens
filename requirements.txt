@@ -1,0 +1,15 @@
+streamlit
+transformers
+pandas
+matplotlib
+wordcloud
+emoji
+textblob
+requests
+streamlit-lottie
+bertopic
+nltk
+spacy
+plotly
+streamlit-extras
+streamlit-option-menu
