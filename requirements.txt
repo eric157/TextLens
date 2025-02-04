@@ -8,5 +8,6 @@ requests
 Pillow
 plotly
 spacy
+emoji
 textstat
 fasttext
