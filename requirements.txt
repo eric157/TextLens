@@ -7,11 +7,5 @@ pillow
 requests==2.31.0
 plotly==5.18.0
 streamlit_extras==0.3.6
-nltk==3.9
 textstat==0.7.3
-langdetect==1.0.9
-spacy==3.7.2
 language_tool_python
-en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0-py3-none-any.whl
-emoji
-streamlit_option_menu

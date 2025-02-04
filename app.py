@@ -13,16 +13,10 @@ from streamlit_extras.app_logo import add_logo
 from streamlit_option_menu import option_menu
 import os
 
-import nltk  # For text preprocessing visualization
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import word_tokenize
-import nltk.data
 
 import textstat  # For readability scores
-import langdetect  # For language detection
 
-import spacy  # For NER and POS tagging
+import stylecloud
 
 import language_tool_python # Grammar and spelling checks
 
@@ -33,26 +27,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# --- Download NLTK Resources (Run once) ---
-try:
-    stop_words = set(stopwords.words('english'))
-except LookupError:
-    nltk.download('stopwords')
-    stop_words = set(stopwords.words('english'))
-try:
-    wordnet_lemmatizer = WordNetLemmatizer()
-except LookupError:
-    nltk.download('wordnet')
-    wordnet_lemmatizer = WordNetLemmatizer()
-
-try:
-    word_tokenize("example")
-except LookupError:
-    nltk.download('punkt')
-
-stop_words = set(stopwords.words('english'))
-wordnet_lemmatizer = WordNetLemmatizer()
 
 # Define Theme colors (simplified)
 LIGHT_MODE = {
@@ -71,19 +45,6 @@ DARK_MODE = {
 }
 DEFAULT_THEME = "dark"
 
-# --- Load spaCy Model ---
-@st.cache_resource
-def load_spacy_model():
-    try:
-        nlp = spacy.load("en_core_web_sm")
-    except OSError:
-        st.warning("Downloading spaCy 'en_core_web_sm' model. This might take a few moments.")
-        spacy.cli.download("en_core_web_sm")  # Download if not found
-        nlp = spacy.load("en_core_web_sm")
-    return nlp
-
-nlp = load_spacy_model()
-
 # --- Load LanguageTool ---
 @st.cache_resource
 def load_language_tool():
@@ -94,25 +55,6 @@ language_tool = load_language_tool()
 
 # --- Helper Functions for New Features ---
 
-@st.cache_data
-def get_pos_distribution(text):
-    doc = nlp(text)
-    pos_counts = {}
-    for token in doc:
-        pos = token.pos_
-        if pos in pos_counts:
-            pos_counts[pos] += 1
-        else:
-            pos_counts[pos] = 1
-    total = sum(pos_counts.values())
-    pos_percentages = {pos: count / total * 100 for pos, count in pos_counts.items()}
-    return pos_percentages
-
-@st.cache_data
-def extract_named_entities(text):
-    doc = nlp(text)
-    entities = [(ent.text, ent.label_) for ent in doc.ents]
-    return entities
 
 @st.cache_data
 def calculate_sentence_complexity_score(text):
@@ -129,16 +71,6 @@ def calculate_sentence_complexity_score(text):
     subordinate_ratio = num_subordinate_clauses / num_sentences if num_sentences > 0 else 0
 
     return avg_sentence_length + subordinate_ratio
-
-@st.cache_data
-def analyze_stopword_density(text):
-    tokens = word_tokenize(text.lower())
-    total_words = len(tokens)
-    if total_words == 0:
-        return 0
-    stopword_count = len([word for word in tokens if word in stop_words])
-    stopword_density = stopword_count / total_words
-    return stopword_density
 
 @st.cache_data
 def check_grammar_and_spelling(text):
@@ -462,13 +394,9 @@ with tab1:  # Text Analysis
 
     with col1:
         show_readability = st.checkbox("Show Readability Scores")
-        detect_language = st.checkbox("Detect Language")
-        show_pos_distribution = st.checkbox("Show POS Tag Distribution")
 
     with col2:
-        show_ner = st.checkbox("Show Named Entity Recognition")
         show_complexity = st.checkbox("Show Sentence Complexity")
-        show_stopword_density = st.checkbox("Show Stopword Density")
         show_grammar_errors = st.checkbox("Check Grammar and Spelling")
 
     if text_input:
@@ -520,33 +448,10 @@ with tab1:  # Text Analysis
                 flesch_kincaid = textstat.flesch_kincaid_grade(text_input)
                 st.metric("Flesch-Kincaid Grade Level", flesch_kincaid)
 
-            if detect_language:
-                st.subheader("Language Detection")
-                try:
-                    language = langdetect.detect(text_input)
-                    st.write(f"Detected Language: {language}")
-                except langdetect.LangDetectException:
-                    st.warning("Could not detect language.")
-
-            if show_pos_distribution:
-                st.subheader("Part-of-Speech Tag Distribution")
-                pos_counts = get_pos_distribution(text_input)
-                st.write(pos_counts)
-
-            if show_ner:
-                st.subheader("Named Entity Recognition")
-                entities = extract_named_entities(text_input)
-                st.write(entities)
-
             if show_complexity:
                 st.subheader("Sentence Complexity Score")
                 complexity_score = calculate_sentence_complexity_score(text_input)
                 st.metric("Complexity Score", round(complexity_score, 2))
-
-            if show_stopword_density:
-                st.subheader("Stopword Density")
-                stopword_density = analyze_stopword_density(text_input)
-                st.metric("Stopword Density", round(stopword_density, 2))
 
             if show_grammar_errors:
                 st.subheader("Grammar and Spelling Check")
