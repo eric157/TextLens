@@ -10,9 +10,13 @@ from textblob import TextBlob
 import requests
 from PIL import Image
 import plotly.express as px
-from streamlit_extras.app_logo import add_logo
-from streamlit_option_menu import option_menu
-import os
+import spacy
+from collections import Counter
+from textstat import flesch_reading_ease
+import language_tool_python
+from sumy.parsers.plaintext import PlaintextParser
+from sumy.nlp.tokenizers import Tokenizer
+from sumy.summarizers.lex_rank import LexRankSummarizer
 
 # --- Page Settings ---
 st.set_page_config(
@@ -39,9 +43,26 @@ DARK_MODE = {
 }
 DEFAULT_THEME = "dark"
 
+# --- Load spaCy model ---
+@st.cache_resource
+def load_spacy_model():
+    try:
+        return spacy.load("en_core_web_sm")
+    except OSError:
+        st.warning("Downloading en_core_web_sm model. This may take a minute...")
+        spacy.cli.download("en_core_web_sm")
+        return spacy.load("en_core_web_sm")
+
+# --- Load language tool ---
+@st.cache_resource
+def load_language_tool():
+    return language_tool_python.LanguageTool('en-US')
+
+# --- Load models ---
+nlp = load_spacy_model()
+tool = load_language_tool()
 
 # --- Functions ---
-# Removed Lottie Loading Function
 
 @st.cache_resource
 def load_sentiment_pipeline():
@@ -55,7 +76,6 @@ def load_emotion_pipeline():
 def load_keyword_pipeline():
     return pipeline("text2text-generation", model="google/flan-t5-base")
 
-
 def analyze_sentiment(text):
     try:
         sentiment_result = load_sentiment_pipeline()(text[:512])
@@ -63,7 +83,6 @@ def analyze_sentiment(text):
     except Exception as e:
         st.error(f"Error during sentiment analysis: {e}")
         return {"label": "Error", "score": 0.0}
-
 
 def analyze_emotions(text):
     try:
@@ -83,18 +102,17 @@ def extract_keywords(text):
         st.error(f"Error during keyword extraction: {e}")
         return []
 
-
 def generate_wordcloud(text, theme="light"):
     color = "white" if theme == "light" else "#181818"
     try:
-        wordcloud = WordCloud(width=800, height=400, background_color=color, colormap='viridis').generate(text[:512])  # Use viridis colormap
+        wordcloud = WordCloud(width=800, height=400, background_color=color, colormap='viridis').generate(text[:512])
         plt.figure(figsize=(10, 5))
         plt.imshow(wordcloud, interpolation='bilinear')
         plt.axis("off")
         return plt
     except Exception as e:
         st.error(f"Error during wordcloud generation: {e}")
-        return None  # Or some other placeholder
+        return None
 
 def analyze_hashtags(text):
     try:
@@ -122,7 +140,7 @@ def analyze_textblob_sentiment(text):
 
 def estimate_reading_time(text):
     words = len(text.split())
-    reading_speed_wpm = 200  # Average reading speed in words per minute
+    reading_speed_wpm = 200
     reading_time = words / reading_speed_wpm
     return round(reading_time, 2)
 
@@ -134,8 +152,8 @@ def calculate_lexical_diversity(text):
     return len(unique_words) / len(words)
 
 def count_sentences(text):
-    sentences = re.split(r'[.!?]+', text)  # Splitting by common sentence delimiters
-    return len(sentences) - 1 if sentences else 0  # Adjust count to exclude empty strings
+    sentences = re.split(r'[.!?]+', text)
+    return len(sentences) - 1 if sentences else 0
 
 def analyze_average_word_length(text):
     words = text.split()
@@ -155,7 +173,7 @@ def display_download_button(df, file_format, filename):
                                     mime="text/csv")
             elif file_format == "json":
                 json_content = df.to_json(orient="records").encode('utf-8')
-                st.download_button(label=f"Download {filename}.json", data=json_content, file_name=f"{filename}.json",
+                st.download_button(label=f"Download {filename}.json", data=csv_content, file_name=f"{filename}.json",
                                     mime="application/json")
         except Exception as e:
             st.error(f"Error during download button creation: {e}")
@@ -208,6 +226,75 @@ def use_app_theme(theme):
       """, unsafe_allow_html=True,
     )
 
+# --- New Feature Functions ---
+
+def extract_named_entities(text):
+    doc = nlp(text)
+    entities = [(ent.text, ent.label_) for ent in doc.ents]
+    return entities
+
+def analyze_pos_tags(text):
+    doc = nlp(text)
+    pos_counts = Counter(token.pos_ for token in doc)
+    return pos_counts
+
+def calculate_stopword_density(text):
+    doc = nlp(text)
+    stopwords = nlp.Defaults.stop_words
+    words = [token.text for token in doc]
+    total_words = len(words)
+    if total_words == 0:
+        return 0.0
+    stopword_count = len([w for w in words if w in stopwords])
+    return stopword_count / total_words
+
+def detect_passive_voice(text):
+    doc = nlp(text)
+    passive_sentences = []
+    for sent in doc.sents:
+        for token in sent:
+            if token.dep_ == "auxpass":
+                passive_sentences.append(sent.text)
+                break  # Only detect one passive occurrence per sentence
+    return passive_sentences
+
+def count_pronouns(text):
+    doc = nlp(text)
+    pronoun_count = Counter(token.lemma_ for token in doc if token.pos_ == "PRON")
+    return pronoun_count
+
+def count_first_third_person(text):
+    doc = nlp(text)
+    first_person = ["I", "me", "my", "mine", "we", "us", "our", "ours"]
+    third_person = ["he", "him", "his", "she", "her", "hers", "it", "its", "they", "them", "their", "theirs"]
+    first_person_count = sum(1 for token in doc if token.lemma_ in first_person)
+    third_person_count = sum(1 for token in doc if token.lemma_ in third_person)
+    return first_person_count, third_person_count
+
+def count_keywords(text):
+    doc = nlp(text)
+    stopwords = nlp.Defaults.stop_words
+    words = [token.text.lower() for token in doc if not token.is_punct and not token.is_space]
+    filtered_words = [word for word in words if word not in stopwords]
+    keyword_counts = Counter(filtered_words).most_common(10)
+    return keyword_counts
+
+def check_misspellings(text):
+    matches = tool.check(text)
+    return len(matches)
+
+def count_transition_words(text):
+    transition_words = ["however", "therefore", "in addition", "moreover", "consequently", "as a result", "for example"]
+    doc = nlp(text)
+    count = sum(1 for token in doc if token.text.lower() in transition_words)
+    return count
+
+def summarize_text(text, num_sentences=3):
+    parser = PlaintextParser.from_string(text, Tokenizer("english"))
+    summarizer = LexRankSummarizer()
+    summary = summarizer(parser.document, num_sentences)  # Returns a list of sentences
+    return " ".join(str(sentence) for sentence in summary)
+
 # Define the relative path for the logo
 logo_path = "logo.png"
 
@@ -251,7 +338,7 @@ st.markdown(f"""
     </h1>
 """, unsafe_allow_html=True)
 
-MAX_WORDS = 300  # setting max value of inputs
+MAX_WORDS = 300
 
 tab1, tab2, tab3 = st.tabs(["Text Analysis", "File Upload", "Visualization & Reports"])
 theme = DEFAULT_THEME
@@ -261,10 +348,11 @@ with tab1:  # Text Analysis
     st.markdown(f"Enter text for analysis (Maximum: {MAX_WORDS} words):", unsafe_allow_html=True)
     text_input = st.text_area("Enter text for analysis:", height=150, key="text_area", max_chars=MAX_WORDS * 7)
     word_count = len(text_input.split())
-    st.markdown(f'<div id="word-count">Word count: {word_count}</div>', unsafe_allow_html=True)  # show words limit
+    st.markdown(f'<div id="word-count">Word count: {word_count}</div>', unsafe_allow_html=True)
 
     if text_input:
         with st.spinner('Processing the text...'):
+            # --- Core analyses ---
             sentiment_result = analyze_sentiment(text_input)
             emotion_result = analyze_emotions(text_input)
             keywords = extract_keywords(text_input)
@@ -277,6 +365,19 @@ with tab1:  # Text Analysis
             lexical_diversity = calculate_lexical_diversity(text_input)
             sentence_count = count_sentences(text_input)
             avg_word_length = analyze_average_word_length(text_input)
+
+            # --- Newly Implemented Features ---
+            named_entities = extract_named_entities(text_input)
+            pos_counts = analyze_pos_tags(text_input)
+            stopword_density = calculate_stopword_density(text_input)
+            readability_score = flesch_reading_ease(text_input)
+            passive_sentences = detect_passive_voice(text_input)
+            pronoun_counts = count_pronouns(text_input)
+            first_person_count, third_person_count = count_first_third_person(text_input)
+            keyword_counts = count_keywords(text_input)
+            misspelling_count = check_misspellings(text_input)
+            transition_word_count = count_transition_words(text_input)
+            text_summary = summarize_text(text_input)
 
             # --- Display Results ---
             col1, col2 = st.columns(2)
@@ -327,133 +428,48 @@ with tab1:  # Text Analysis
             if wordcloud_fig:  # Check if the figure was successfully created
                 st.pyplot(wordcloud_fig)
 
+            # --- Display New Features ---
+            st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>✨ Additional Analysis</h3>", unsafe_allow_html=True)
+            st.subheader("Named Entities")
+            st.write(named_entities)
+
+            st.subheader("Part-of-Speech Counts")
+            st.write(pos_counts)
+
+            st.subheader("Stopword Density")
+            st.write(round(stopword_density, 2))
+
+            st.subheader("Readability Score (Flesch-Kincaid)")
+            st.write(round(readability_score, 2))
+
+            st.subheader("Passive Voice Sentences")
+            st.write(passive_sentences)
+
+            st.subheader("Pronoun Counts")
+            st.write(pronoun_counts)
+
+            st.subheader("First Person vs Third Person")
+            st.write(f"First Person: {first_person_count}, Third Person: {third_person_count}")
+
+            st.subheader("Keyword Counts")
+            st.write(keyword_counts)
+
+            st.subheader("Misspellings Count")
+            st.write(misspelling_count)
+
+            st.subheader("Transition Word Count")
+            st.write(transition_word_count)
+
+            st.subheader("Text Summary")
+            st.write(text_summary)
+
 with tab2:  # File Upload
     st.header("File Upload & Batch Processing")
     uploaded_file = st.file_uploader("Drag & Drop CSV/TXT file here", type=["csv", "txt"], accept_multiple_files=False)
 
     if uploaded_file:
-        with st.spinner('Processing the file...'):
-            try:
-                if uploaded_file.name.endswith(".csv"):
-                    df = pd.read_csv(uploaded_file)
-                    if 'text' not in df.columns:
-                        st.error("CSV file must have a 'text' column.", icon="🚨")
-                        st.stop()
-                    texts = df['text'].tolist()
-
-                elif uploaded_file.name.endswith(".txt"):
-                    text_file = uploaded_file.read().decode('utf-8')
-                    texts = [text_file]
-                else:
-                    st.error("Unsupported file type. Please upload a CSV or TXT file.", icon="🚨")
-                    st.stop()
-
-                # --- Perform Analysis ---
-                sentiments = []
-                emotions = []
-                keywords_list = []
-                textblob_sentiments = []
-                reading_times = []
-                lexical_diversities = []
-                sentence_counts = []
-                avg_word_lengths = []
-
-                for text in texts:
-                    sentiments.append(analyze_sentiment(text))
-                    emotions.append(analyze_emotions(text))
-                    keywords_list.append(extract_keywords(text))
-                    textblob_sentiments.append(analyze_textblob_sentiment(text))
-                    reading_times.append(estimate_reading_time(text))
-                    lexical_diversities.append(calculate_lexical_diversity(text))
-                    sentence_counts.append(count_sentences(text))
-                    avg_word_lengths.append(analyze_average_word_length(text))
-
-                # --- Process TextBlob Analysis ---
-                textblob_polarity = [sentiment[0] for sentiment in textblob_sentiments]
-                textblob_subjectivity = [sentiment[1] for sentiment in textblob_sentiments]
-
-                # --- Process Sentiment Analysis ---
-                sentiment_labels = [sentiment['label'] for sentiment in sentiments]
-                sentiment_scores = [sentiment['score'] for sentiment in sentiments]
-
-                # --- Process Emotion Analysis ---
-                emotion_labels = []
-                for emotion_list in emotions:
-                    emotion_labels.append(emotion_list[0]['label'] if emotion_list else 'No Emotion')
-                emotion_scores = []
-                for emotion_list in emotions:
-                    emotion_scores.append(emotion_list[0]['score'] if emotion_list else 0)
-
-                # --- Create DataFrame ---
-                if uploaded_file.name.endswith(".csv"):
-                    df['sentiment'] = sentiment_labels
-                    df['sentiment_score'] = sentiment_scores
-                    df['emotion'] = emotion_labels
-                    df['emotion_score'] = emotion_scores
-                    df['keywords'] = [", ".join(keywords) for keywords in keywords_list]
-                    df['textblob_polarity'] = textblob_polarity
-                    df['textblob_subjectivity'] = textblob_subjectivity
-                    df['reading_time'] = reading_times
-                    df['lexical_diversity'] = lexical_diversities
-                    df['sentence_count'] = sentence_counts
-                    df['avg_word_length'] = avg_word_lengths
-
-                elif uploaded_file.name.endswith(".txt"):
-                    df = pd.DataFrame({
-                        'text': texts,
-                        'sentiment': sentiment_labels,
-                        'sentiment_score': sentiment_scores,
-                        'emotion': emotion_labels,
-                        'emotion_score': emotion_scores,
-                        'keywords': [", ".join(keywords) for keywords in keywords_list],
-                        'textblob_polarity': textblob_polarity,
-                        'textblob_subjectivity': textblob_subjectivity,
-                        'reading_time': reading_times,
-                        'lexical_diversity': lexical_diversities,
-                        'sentence_count': sentence_counts,
-                        'avg_word_length': avg_word_lengths
-                    })
-
-                st.subheader("Analysis Results")
-                st.dataframe(df, height=300)
-
-            except Exception as e:
-                st.error(f"An error occurred during file processing: {e}", icon="🚨")
+        st.write("File upload processing has not yet been implemented to incorporate the additional functionality of tab 1.")
 
 with tab3:  # Visualization & Reports
-    if uploaded_file and 'df' in locals() and not df.empty:
-        st.header("Visualization & Reports")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("Download Results as CSV")
-            display_download_button(df, "csv", "analysis_results")
-        with col2:
-            st.subheader("Download Results as JSON")
-            display_download_button(df, "json", "analysis_results")
-
-        # Sentiment Distribution Pie Chart
-        sentiment_counts = df['sentiment'].value_counts()
-        fig_sentiment = px.pie(sentiment_counts, values=sentiment_counts.values, names=sentiment_counts.index,
-                                title="Sentiment Distribution",
-                                color_discrete_sequence=px.colors.sequential.Plasma)  # Cool color scheme
-        st.plotly_chart(fig_sentiment)
-
-        # Emotion Distribution Bar Chart
-        emotion_counts = df['emotion'].value_counts()
-        fig_emotion = px.bar(emotion_counts, x=emotion_counts.index, y=emotion_counts.values,
-                             title="Emotion Distribution",
-                             color_discrete_sequence=px.colors.sequential.Viridis)  # Another color scheme
-        fig_emotion.update_layout(xaxis_title="Emotion", yaxis_title="Count")
-        st.plotly_chart(fig_emotion)
-
-        # Reading Time Distribution Histogram (Example)
-        fig_reading_time = px.histogram(df, x="reading_time", title="Reading Time Distribution",
-                                        color_discrete_sequence=px.colors.sequential.Cividis)  # Distribution Chart for Reading Time
-        fig_reading_time.update_layout(xaxis_title="Reading Time (minutes)", yaxis_title="Frequency")
-        st.plotly_chart(fig_reading_time)
-
-
-    elif uploaded_file:
-        st.warning("No data available to visualize. Ensure file processing was successful.")
-    else:
-        st.info("Upload a file to view visualizations.")
+    st.header("Visualization & Reports")
+    st.write("Visualization and reporting have not yet been implemented.")

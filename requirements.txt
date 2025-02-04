@@ -7,5 +7,7 @@ textblob
 requests
 Pillow
 plotly
-streamlit_extras
-streamlit_option_menu
+spacy
+textstat
+language_tool_python
+sumy
