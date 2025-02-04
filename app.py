@@ -10,18 +10,9 @@ from textblob import TextBlob
 import requests
 from PIL import Image
 import plotly.express as px
-import spacy
-from collections import Counter
-import textstat
-from nltk.corpus import stopwords
-
-# Download stopwords if not already present
-try:
-    stopwords.words('english')
-except LookupError:
-    import nltk
-    nltk.download('stopwords')
-
+from streamlit_extras.app_logo import add_logo
+from streamlit_option_menu import option_menu
+import os
 
 # --- Page Settings ---
 st.set_page_config(
@@ -48,19 +39,9 @@ DARK_MODE = {
 }
 DEFAULT_THEME = "dark"
 
-# --- Load SpaCy Model ---
-@st.cache_resource
-def load_spacy_model():
-    try:
-        return spacy.load("en_core_web_sm")
-    except OSError:
-        print("Downloading en_core_web_sm model for spaCy...")
-        spacy.cli.download("en_core_web_sm")
-        return spacy.load("en_core_web_sm")
-
-nlp = load_spacy_model()
 
 # --- Functions ---
+# Removed Lottie Loading Function
 
 @st.cache_resource
 def load_sentiment_pipeline():
@@ -74,6 +55,7 @@ def load_emotion_pipeline():
 def load_keyword_pipeline():
     return pipeline("text2text-generation", model="google/flan-t5-base")
 
+
 def analyze_sentiment(text):
     try:
         sentiment_result = load_sentiment_pipeline()(text[:512])
@@ -81,6 +63,7 @@ def analyze_sentiment(text):
     except Exception as e:
         st.error(f"Error during sentiment analysis: {e}")
         return {"label": "Error", "score": 0.0}
+
 
 def analyze_emotions(text):
     try:
@@ -100,17 +83,18 @@ def extract_keywords(text):
         st.error(f"Error during keyword extraction: {e}")
         return []
 
+
 def generate_wordcloud(text, theme="light"):
     color = "white" if theme == "light" else "#181818"
     try:
-        wordcloud = WordCloud(width=800, height=400, background_color=color, colormap='viridis').generate(text[:512])
+        wordcloud = WordCloud(width=800, height=400, background_color=color, colormap='viridis').generate(text[:512])  # Use viridis colormap
         plt.figure(figsize=(10, 5))
         plt.imshow(wordcloud, interpolation='bilinear')
         plt.axis("off")
         return plt
     except Exception as e:
         st.error(f"Error during wordcloud generation: {e}")
-        return None
+        return None  # Or some other placeholder
 
 def analyze_hashtags(text):
     try:
@@ -138,7 +122,7 @@ def analyze_textblob_sentiment(text):
 
 def estimate_reading_time(text):
     words = len(text.split())
-    reading_speed_wpm = 200
+    reading_speed_wpm = 200  # Average reading speed in words per minute
     reading_time = words / reading_speed_wpm
     return round(reading_time, 2)
 
@@ -150,8 +134,8 @@ def calculate_lexical_diversity(text):
     return len(unique_words) / len(words)
 
 def count_sentences(text):
-    sentences = re.split(r'[.!?]+', text)
-    return len(sentences) - 1 if sentences else 0
+    sentences = re.split(r'[.!?]+', text)  # Splitting by common sentence delimiters
+    return len(sentences) - 1 if sentences else 0  # Adjust count to exclude empty strings
 
 def analyze_average_word_length(text):
     words = text.split()
@@ -171,7 +155,7 @@ def display_download_button(df, file_format, filename):
                                     mime="text/csv")
             elif file_format == "json":
                 json_content = df.to_json(orient="records").encode('utf-8')
-                st.download_button(label=f"Download {filename}.json", data=csv_content, file_name=f"{filename}.json",
+                st.download_button(label=f"Download {filename}.json", data=json_content, file_name=f"{filename}.json",
                                     mime="application/json")
         except Exception as e:
             st.error(f"Error during download button creation: {e}")
@@ -224,102 +208,6 @@ def use_app_theme(theme):
       """, unsafe_allow_html=True,
     )
 
-def extract_ner(text):
-    try:
-        doc = nlp(text)
-        ner_results = [(ent.text, ent.label_) for ent in doc.ents]
-        return ner_results
-    except Exception as e:
-        st.error(f"Error during NER extraction: {e}")
-        return []
-
-def analyze_pos_ratio(text):
-    try:
-        doc = nlp(text)
-        pos_counts = Counter(token.pos_ for token in doc)
-        total_tokens = len(doc)
-        pos_ratios = {pos: count / total_tokens for pos, count in pos_counts.items()}
-        return pos_ratios
-    except Exception as e:
-        st.error(f"Error during POS analysis: {e}")
-        return {}
-
-def calculate_sentence_complexity(text):
-    try:
-        doc = nlp(text)
-        sentences = list(doc.sents)
-        if not sentences:
-            return 0.0
-        total_length = sum(len(str(sentence).split()) for sentence in sentences)
-        return total_length / len(sentences)
-    except Exception as e:
-        st.error(f"Error during sentence complexity analysis: {e}")
-        return 0.0
-
-def analyze_stopword_density(text):
-    try:
-        words = text.lower().split()
-        stop_words = set(stopwords.words('english'))
-        filtered_words = [word for word in words if word in stop_words]
-        if not words:
-            return 0.0
-        stopword_density = len(filtered_words) / len(words)
-        return stopword_density
-    except Exception as e:
-        st.error(f"Error during stopword density analysis: {e}")
-        return 0.0
-
-def calculate_readability_score(text):
-    try:
-        return textstat.flesch_reading_ease(text)
-    except Exception as e:
-        st.error(f"Error during readability score calculation: {e}")
-        return 0.0
-
-def analyze_pronoun_density(text):
-    try:
-        doc = nlp(text)
-        pronoun_count = sum(1 for token in doc if token.pos_ == "PRON")
-        total_tokens = len(doc)
-        if total_tokens == 0:
-            return 0.0
-        return pronoun_count / total_tokens
-    except Exception as e:
-        st.error(f"Error during pronoun density analysis: {e}")
-        return 0.0
-
-def detect_perspective(text):
-    try:
-        doc = nlp(text)
-        first_person_count = sum(1 for token in doc if token.lemma_ in ("I", "we", "me", "us", "my", "mine", "our", "ours"))
-        third_person_count = sum(1 for token in doc if token.lemma_ in ("he", "she", "it", "him", "her", "his", "hers", "its", "they", "them", "their", "theirs"))
-        return first_person_count, third_person_count
-    except Exception as e:
-        st.error(f"Error during perspective detection: {e}")
-        return 0, 0
-
-def keyword_frequency_counter(text):
-    try:
-        stop_words = set(stopwords.words('english'))
-        words = text.lower().split()
-        filtered_words = [word for word in words if word not in stop_words and word.isalpha()]
-        word_counts = Counter(filtered_words)
-        most_common = word_counts.most_common(10)
-        return most_common
-    except Exception as e:
-        st.error(f"Error during keyword frequency counting: {e}")
-        return []
-
-def analyze_transition_strength(text):
-    try:
-        transition_words = ["however", "therefore", "in addition", "for example", "in conclusion", "on the other hand", "furthermore", "moreover", "besides", "thus"]
-        words = text.lower().split()
-        transition_count = sum(1 for word in words if word in transition_words)
-        return transition_count
-    except Exception as e:
-        st.error(f"Error during transition strength analysis: {e}")
-        return 0
-
 # Define the relative path for the logo
 logo_path = "logo.png"
 
@@ -340,7 +228,7 @@ with st.sidebar:
     st.write("Perform text analysis including sentiment, emotion, and keyword extraction.")
     st.markdown("---")
     with st.expander("💡 Model Details"):
-        st.write("This app leverages pre-trained transformer models from the Hugging Face Transformers library and SpaCy.")
+        st.write("This app leverages pre-trained transformer models from the Hugging Face Transformers library.")
     st.markdown("---")
     with st.expander("📖 Usage Guide"):
         st.markdown("""
@@ -355,7 +243,6 @@ with st.sidebar:
 use_app_theme(DEFAULT_THEME)
 
 # ---- Main App Content ----
-# No Image
 
 # Title styling
 st.markdown(f"""
@@ -364,7 +251,7 @@ st.markdown(f"""
     </h1>
 """, unsafe_allow_html=True)
 
-MAX_WORDS = 300
+MAX_WORDS = 300  # setting max value of inputs
 
 tab1, tab2, tab3 = st.tabs(["Text Analysis", "File Upload", "Visualization & Reports"])
 theme = DEFAULT_THEME
@@ -374,7 +261,7 @@ with tab1:  # Text Analysis
     st.markdown(f"Enter text for analysis (Maximum: {MAX_WORDS} words):", unsafe_allow_html=True)
     text_input = st.text_area("Enter text for analysis:", height=150, key="text_area", max_chars=MAX_WORDS * 7)
     word_count = len(text_input.split())
-    st.markdown(f'<div id="word-count">Word count: {word_count}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div id="word-count">Word count: {word_count}</div>', unsafe_allow_html=True)  # show words limit
 
     if text_input:
         with st.spinner('Processing the text...'):
@@ -390,14 +277,6 @@ with tab1:  # Text Analysis
             lexical_diversity = calculate_lexical_diversity(text_input)
             sentence_count = count_sentences(text_input)
             avg_word_length = analyze_average_word_length(text_input)
-            ner_results = extract_ner(text_input)
-            pos_ratios = analyze_pos_ratio(text_input)
-            stopword_density = analyze_stopword_density(text_input)
-            readability_score = calculate_readability_score(text_input)
-            pronoun_density = analyze_pronoun_density(text_input)
-            first_person_count, third_person_count = detect_perspective(text_input)
-            keyword_frequencies = keyword_frequency_counter(text_input)
-            transition_strength = analyze_transition_strength(text_input)
 
             # --- Display Results ---
             col1, col2 = st.columns(2)
@@ -445,37 +324,8 @@ with tab1:  # Text Analysis
             st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'> ☁️ Word Cloud Visualization</h3>",
                         unsafe_allow_html=True)
             wordcloud_fig = generate_wordcloud(text_input, theme=theme)
-            if wordcloud_fig:
+            if wordcloud_fig:  # Check if the figure was successfully created
                 st.pyplot(wordcloud_fig)
-
-            # --- Display SpaCy Features ---
-            with st.expander("📚 Linguistic Analysis"):
-                st.subheader("Named Entity Recognition")
-                st.write(ner_results)
-
-                st.subheader("Part-of-Speech Ratios")
-                st.write(pos_ratios)
-
-                st.subheader("Sentence Complexity")
-                st.write(calculate_sentence_complexity(text_input))
-
-                st.subheader("Stopword Density")
-                st.write(stopword_density)
-
-                st.subheader("Readability Score")
-                st.write(readability_score)
-
-                st.subheader("Pronoun Density")
-                st.write(pronoun_density)
-
-                st.subheader("Perspective Detection")
-                st.write(f"First Person: {first_person_count}, Third Person: {third_person_count}")
-
-                st.subheader("Keyword Frequencies")
-                st.write(keyword_frequencies)
-
-                st.subheader("Transition Strength")
-                st.write(transition_strength)
 
 with tab2:  # File Upload
     st.header("File Upload & Batch Processing")
@@ -507,14 +357,6 @@ with tab2:  # File Upload
                 lexical_diversities = []
                 sentence_counts = []
                 avg_word_lengths = []
-                ner_results_list = []
-                pos_ratios_list = []
-                stopword_densities = []
-                readability_scores = []
-                pronoun_densities = []
-                first_third_person_counts = []
-                keyword_frequencies_list = []
-                transition_strengths = []
 
                 for text in texts:
                     sentiments.append(analyze_sentiment(text))
@@ -525,14 +367,6 @@ with tab2:  # File Upload
                     lexical_diversities.append(calculate_lexical_diversity(text))
                     sentence_counts.append(count_sentences(text))
                     avg_word_lengths.append(analyze_average_word_length(text))
-                    ner_results_list.append(extract_ner(text))
-                    pos_ratios_list.append(analyze_pos_ratio(text))
-                    stopword_densities.append(analyze_stopword_density(text))
-                    readability_scores.append(calculate_readability_score(text))
-                    pronoun_densities.append(analyze_pronoun_density(text))
-                    first_third_person_counts.append(detect_perspective(text))
-                    keyword_frequencies_list.append(keyword_frequency_counter(text))
-                    transition_strengths.append(analyze_transition_strength(text))
 
                 # --- Process TextBlob Analysis ---
                 textblob_polarity = [sentiment[0] for sentiment in textblob_sentiments]
@@ -563,14 +397,6 @@ with tab2:  # File Upload
                     df['lexical_diversity'] = lexical_diversities
                     df['sentence_count'] = sentence_counts
                     df['avg_word_length'] = avg_word_lengths
-                    df['ner_results'] = [str(ner) for ner in ner_results_list]  # Convert lists to strings
-                    df['pos_ratios'] = [str(pos) for pos in pos_ratios_list]  # Convert dictionaries to strings
-                    df['stopword_density'] = stopword_densities
-                    df['readability_score'] = readability_scores
-                    df['pronoun_density'] = pronoun_densities
-                    df['first_third_person'] = [str(ft) for ft in first_third_person_counts]  # Convert tuples to strings
-                    df['keyword_frequencies'] = [str(kf) for kf in keyword_frequencies_list]  # Convert list to string
-                    df['transition_strength'] = transition_strengths
 
                 elif uploaded_file.name.endswith(".txt"):
                     df = pd.DataFrame({
@@ -585,15 +411,7 @@ with tab2:  # File Upload
                         'reading_time': reading_times,
                         'lexical_diversity': lexical_diversities,
                         'sentence_count': sentence_counts,
-                        'avg_word_length': avg_word_lengths,
-                        'ner_results': [str(ner) for ner in ner_results_list],  # Convert lists to strings
-                        'pos_ratios': [str(pos) for pos in pos_ratios_list],  # Convert dictionaries to strings
-                        'stopword_density': stopword_densities,
-                        'readability_score': readability_scores,
-                        'pronoun_density': pronoun_densities,
-                        'first_third_person': [str(ft) for ft in first_third_person_counts],  # Convert tuples to strings
-                        'keyword_frequencies': [str(kf) for kf in keyword_frequencies_list],  # Convert list to string
-                        'transition_strength': transition_strengths
+                        'avg_word_length': avg_word_lengths
                     })
 
                 st.subheader("Analysis Results")
@@ -617,27 +435,23 @@ with tab3:  # Visualization & Reports
         sentiment_counts = df['sentiment'].value_counts()
         fig_sentiment = px.pie(sentiment_counts, values=sentiment_counts.values, names=sentiment_counts.index,
                                 title="Sentiment Distribution",
-                                color_discrete_sequence=px.colors.sequential.Plasma)
+                                color_discrete_sequence=px.colors.sequential.Plasma)  # Cool color scheme
         st.plotly_chart(fig_sentiment)
 
         # Emotion Distribution Bar Chart
         emotion_counts = df['emotion'].value_counts()
         fig_emotion = px.bar(emotion_counts, x=emotion_counts.index, y=emotion_counts.values,
                              title="Emotion Distribution",
-                             color_discrete_sequence=px.colors.sequential.Viridis)
+                             color_discrete_sequence=px.colors.sequential.Viridis)  # Another color scheme
         fig_emotion.update_layout(xaxis_title="Emotion", yaxis_title="Count")
         st.plotly_chart(fig_emotion)
 
         # Reading Time Distribution Histogram (Example)
         fig_reading_time = px.histogram(df, x="reading_time", title="Reading Time Distribution",
-                                        color_discrete_sequence=px.colors.sequential.Cividis)
+                                        color_discrete_sequence=px.colors.sequential.Cividis)  # Distribution Chart for Reading Time
         fig_reading_time.update_layout(xaxis_title="Reading Time (minutes)", yaxis_title="Frequency")
         st.plotly_chart(fig_reading_time)
 
-        # Lexical Diversity Scatter Plot
-        fig_lexical_diversity = px.scatter(df, x=df.index, y="lexical_diversity", title="Lexical Diversity Over Text Index")
-        fig_lexical_diversity.update_layout(xaxis_title="Text Index", yaxis_title="Lexical Diversity")
-        st.plotly_chart(fig_lexical_diversity)
 
     elif uploaded_file:
         st.warning("No data available to visualize. Ensure file processing was successful.")
