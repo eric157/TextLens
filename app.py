@@ -50,8 +50,6 @@ DEFAULT_THEME = "dark"
 
 # --- Load SpaCy Model ---
 @st.cache_resource
-# --- Load SpaCy Model ---
-@st.cache_resource
 def load_spacy_model():
     try:
         return spacy.load("en_core_web_sm")
