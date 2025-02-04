@@ -6,7 +6,6 @@ from wordcloud import WordCloud
 import io
 import re
 import emoji
-from textblob import TextBlob
 import requests
 from PIL import Image
 import plotly.express as px
@@ -238,14 +237,6 @@ def analyze_emojis(text):
     except Exception as e:
         st.error(f"Error during emoji analysis: {e}")
         return []
-
-def analyze_textblob_sentiment(text):
-    try:
-        analysis = TextBlob(text)
-        return analysis.sentiment.polarity, analysis.sentiment.subjectivity
-    except Exception as e:
-        st.error(f"Error during TextBlob sentiment analysis: {e}")
-        return 0.0, 0.0
 
 def estimate_reading_time(text):
     words = len(text.split())
@@ -502,7 +493,6 @@ with tab1:  # Text Analysis
             keywords = extract_keywords(text_input)
             hashtags = analyze_hashtags(text_input)
             emojis = analyze_emojis(text_input)
-            textblob_sentiment = analyze_textblob_sentiment(text_input)
 
             # --- Additional Minimalist Features ---
             reading_time = estimate_reading_time(text_input)
@@ -512,7 +502,7 @@ with tab1:  # Text Analysis
 
             # --- Metrics Display ---
             st.subheader("Key Metrics", divider="green")
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3 = st.columns(3)
 
             with col1:
                 st.metric("Sentiment", value=sentiment_result['label'], delta=sentiment_result['score'])
@@ -520,15 +510,12 @@ with tab1:  # Text Analysis
                 st.metric("Reading Time (mins)", reading_time)
             with col3:
                 st.metric("Lexical Diversity", round(lexical_diversity, 2))
-            with col4:
-                st.metric("Sentence Count", sentence_count)
 
-            col5, col6 = st.columns(2)
+            col4, col5 = st.columns(2)
+
+            with col4:
+                 st.metric("Sentence Count", sentence_count)
             with col5:
-                with st.expander("TextBlob Sentiment Analysis"):
-                    st.metric("Polarity", value=round(textblob_sentiment[0], 2))
-                    st.metric("Subjectivity", value=round(textblob_sentiment[1], 2))
-            with col6:
                  st.metric("Avg. Word Length", round(avg_word_length, 2)) # adding it to the UI on request
 
             st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>🔑 Keywords</h3>", unsafe_allow_html=True)
@@ -621,7 +608,6 @@ with tab2:  # File Upload
                 sentiments = []
                 emotions = []
                 keywords_list = []
-                textblob_sentiments = []
                 reading_times = []
                 lexical_diversities = []
                 sentence_counts = []
@@ -631,15 +617,10 @@ with tab2:  # File Upload
                     sentiments.append(analyze_sentiment(text))
                     emotions.append(analyze_emotions(text))
                     keywords_list.append(extract_keywords(text))
-                    textblob_sentiments.append(analyze_textblob_sentiment(text))
                     reading_times.append(estimate_reading_time(text))
                     lexical_diversities.append(calculate_lexical_diversity(text))
                     sentence_counts.append(count_sentences(text))
                     avg_word_lengths.append(analyze_average_word_length(text))
-
-                # --- Process TextBlob Analysis ---
-                textblob_polarity = [sentiment[0] for sentiment in textblob_sentiments]
-                textblob_subjectivity = [sentiment[1] for sentiment in textblob_sentiments]
 
                 # --- Process Sentiment Analysis ---
                 sentiment_labels = [sentiment['label'] for sentiment in sentiments]
@@ -660,8 +641,6 @@ with tab2:  # File Upload
                     df['emotion'] = emotion_labels
                     df['emotion_score'] = emotion_scores
                     df['keywords'] = [", ".join(keywords) for keywords in keywords_list]
-                    df['textblob_polarity'] = textblob_polarity
-                    df['textblob_subjectivity'] = textblob_subjectivity
                     df['reading_time'] = reading_times
                     df['lexical_diversity'] = lexical_diversities
                     df['sentence_count'] = sentence_counts
@@ -675,8 +654,6 @@ with tab2:  # File Upload
                         'emotion': emotion_labels,
                         'emotion_score': emotion_scores,
                         'keywords': [", ".join(keywords) for keywords in keywords_list],
-                        'textblob_polarity': textblob_polarity,
-                        'textblob_subjectivity': textblob_subjectivity,
                         'reading_time': reading_times,
                         'lexical_diversity': lexical_diversities,
                         'sentence_count': sentence_counts,
