@@ -16,6 +16,7 @@ from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lex_rank import LexRankSummarizer
 import nltk
+from transformers import pipeline
 
 # --- Page Settings ---
 st.set_page_config(
@@ -52,13 +53,18 @@ def load_spacy_model():
         spacy.cli.download("en_core_web_sm")
         return spacy.load("en_core_web_sm")
 
+@st.cache_resource
+def load_sentiment_pipeline():
+    return pipeline("sentiment-analysis")
+
+@st.cache_resource
+def load_emotion_pipeline():
+    return pipeline("text-classification", model="SamLowe/roberta-base-go_emotions")
 
 # --- Load models ---
 nlp = load_spacy_model()
 
-
 # --- Functions ---
-
 @st.cache_resource
 def load_sentiment_pipeline():
     return pipeline("sentiment-analysis")
@@ -69,7 +75,8 @@ def load_emotion_pipeline():
 
 def analyze_sentiment(text):
     try:
-        sentiment_result = load_sentiment_pipeline()(text[:512])
+        sentiment_pipeline = load_sentiment_pipeline()
+        sentiment_result = sentiment_pipeline(text[:512])
         return sentiment_result[0]
     except Exception as e:
         st.error(f"Error during sentiment analysis: {e}")
@@ -77,7 +84,8 @@ def analyze_sentiment(text):
 
 def analyze_emotions(text):
     try:
-        emotions_result = load_emotion_pipeline()(text[:512])
+        emotion_pipeline = load_emotion_pipeline()
+        emotions_result = emotion_pipeline(text[:512])
         return emotions_result
     except Exception as e:
         st.error(f"Error during emotion analysis: {e}")
@@ -88,7 +96,7 @@ def extract_keywords(text, num_keywords=10):
     doc = nlp(text)
     stopwords = nlp.Defaults.stop_words
     words = [token.text.lower() for token in doc if not token.is_punct and not token.is_space]
-    filtered_words = [word for word in words if word not in stopwords and token.pos_ in ['NOUN', 'ADJ']]  # Only nouns and adjectives
+    filtered_words = [word for word in words if word not in stopwords]  # Only nouns and adjectives
     keyword_counts = Counter(filtered_words).most_common(num_keywords)
     return keyword_counts
 
@@ -289,7 +297,6 @@ def summarize_text(text, num_sentences=3):
         st.error(f"Error during summarization: {e}")
         return "Error during summarization."
 
-
 # Define the relative path for the logo
 logo_path = "logo.png"
 
@@ -446,9 +453,6 @@ with tab1:  # Text Analysis
 
             st.subheader("First Person vs Third Person")
             st.write(f"First Person: {first_person_count}, Third Person: {third_person_count}")
-
-            st.subheader("Keyword Counts")
-            st.write(keyword_counts)
 
             st.subheader("Corrected Text (Grammar)")
             st.write(corrected_text)

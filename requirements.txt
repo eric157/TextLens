@@ -10,3 +10,4 @@ spacy
 textstat
 sumy
 nltk
+transformers
