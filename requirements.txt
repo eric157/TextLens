@@ -7,7 +7,6 @@ textblob==0.17.1
 requests==2.31.0
 plotly==5.18.0
 streamlit_extras==0.3.6
-streamlit_option_menu==0.3.8
 nltk==3.9
 textstat==0.7.3
 langdetect==1.0.9
