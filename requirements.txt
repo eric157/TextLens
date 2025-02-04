@@ -9,3 +9,4 @@ Pillow
 plotly
 spacy
 textstat
+fasttext

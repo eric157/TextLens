@@ -13,6 +13,7 @@ import spacy
 from collections import Counter
 from textstat import flesch_reading_ease
 from heapq import nlargest
+import fasttext
 
 # --- Page Settings ---
 st.set_page_config(
@@ -50,24 +51,26 @@ def load_spacy_model():
         return spacy.load("en_core_web_sm")
 
 
+# --- Load FastText model ---
+@st.cache_resource
+def load_fasttext_model():
+    try:
+        # Try loading a model that is in the same directory if it exists
+        return fasttext.load_model("emotion_model.bin")
+    except:
+        st.warning("Pre-trained emotion model not found, replacing with sentiment model")
+        try:
+            return fasttext.load_model("lid.176.bin")
+        except:
+            st.error("Please download a model online or train with your own!")
+            return None
+
 # --- Load models ---
 nlp = load_spacy_model()
+ft_model = load_fasttext_model()
 
 
 # --- Functions ---
-
-#Removed pipeline
-#@st.cache_resource
-#def load_sentiment_pipeline():
-#    return pipeline("sentiment-analysis")
-
-#@st.cache_resource
-#def load_emotion_pipeline():
-#    return pipeline("text-classification", model="SamLowe/roberta-base-go_emotions")
-
-#@st.cache_resource #REMOVED
-#def load_keyword_pipeline(): #REMOVED
-#    return pipeline("text2text-generation", model="google/flan-t5-base")
 
 def analyze_sentiment(text):
    try:
@@ -83,28 +86,17 @@ def analyze_sentiment(text):
         st.error(f"Error during sentiment analysis: {e}")
         return {"label": "Error", "score": 0.0}
 
-#Rule-Based Emotion Analysis
+# FastText implementation
 def analyze_emotions(text):
-    text = text.lower()
-    emotion_keywords = {
-        "joy": ["happy", "joyful", "excited", "delighted", "cheerful"],
-        "sadness": ["sad", "unhappy", "depressed", "gloomy", "sorrowful"],
-        "anger": ["angry", "furious", "irate", "annoyed", "enraged"],
-        "fear": ["afraid", "scared", "nervous", "terrified", "anxious"]
-    }
-    emotion_scores = {}
-    for emotion, keywords in emotion_keywords.items():
-        emotion_scores[emotion] = 0
-        for keyword in keywords:
-            if keyword in text:
-                emotion_scores[emotion] += 1
-
-    if not emotion_scores:
-        return {"label": "Neutral", "score": 0.0}
-
-    most_likely_emotion = max(emotion_scores, key=emotion_scores.get)
-    score = emotion_scores[most_likely_emotion]  # Use the count as a score.
-    return {"label": most_likely_emotion, "score": score}
+    if ft_model:
+        try:
+            prediction = ft_model.predict(text)
+            return {"label": prediction[0][0], "score": 1.0}
+        except Exception as e:
+            st.error(f"Error during emotion analysis: {e}")
+            return {"label": "Error", "score": 0.0}
+    else:
+        return {"label": "Model Not Available", "score": 0.0}
 
 def extract_keywords(text):
     try:
@@ -348,10 +340,10 @@ with st.sidebar:
     st.title("⚙️ Settings & Info")
     st.markdown("---")
     st.subheader("📌 About the App")
-    st.write("Perform text analysis including sentiment, and keyword extraction.")
+    st.write("Perform text analysis including sentiment, emotion, and keyword extraction.")
     st.markdown("---")
     with st.expander("💡 Model Details"):
-        st.write("This app leverages spaCy for the NLP and TextBlob for sentiment analysis")
+        st.write("This app leverages pre-trained transformer models from the Hugging Face Transformers library.")
     st.markdown("---")
     with st.expander("📖 Usage Guide"):
         st.markdown("""
@@ -433,7 +425,12 @@ with tab1:  # Text Analysis
             with col2:
                 st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>💖 Emotion Classification</h3>",
                             unsafe_allow_html=True)
-                st.metric(emotion_result['label'], value=round(emotion_result['score'], 2))
+                if ft_model:
+                  emotion_result = analyze_emotions(text_input)
+                  st.metric("Emotion", value=emotion_result['label'], delta=round(emotion_result['score'], 2))
+                else:
+                   st.write("Emotion Classification Model not Available")
+
 
             st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>🔑 Keyword Extraction</h3>",
                         unsafe_allow_html=True)
