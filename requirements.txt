@@ -1,4 +1,5 @@
 streamlit
+transformers
 pandas
 matplotlib
 wordcloud
@@ -6,5 +7,9 @@ textblob
 requests
 Pillow
 plotly
+streamlit_extras
+streamlit_option_menu
+spacy
 textstat
-emoji
+nltk
+en_core_web_sm

@@ -1,4 +1,5 @@
 import streamlit as st
+from transformers import pipeline
 import pandas as pd
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
@@ -9,10 +10,18 @@ from textblob import TextBlob
 import requests
 from PIL import Image
 import plotly.express as px
+import spacy
 from collections import Counter
-from textstat import flesch_reading_ease
-from heapq import nlargest
-import string
+import textstat
+from nltk.corpus import stopwords
+
+# Download stopwords if not already present
+try:
+    stopwords.words('english')
+except LookupError:
+    import nltk
+    nltk.download('stopwords')
+
 
 # --- Page Settings ---
 st.set_page_config(
@@ -39,51 +48,54 @@ DARK_MODE = {
 }
 DEFAULT_THEME = "dark"
 
+# --- Load SpaCy Model ---
+@st.cache_resource
+def load_spacy_model():
+    try:
+        return spacy.load("en_core_web_sm")
+    except OSError:
+        print("Downloading en_core_web_sm model for spaCy...")
+        spacy.cli.download("en_core_web_sm")
+        return spacy.load("en_core_web_sm")
+
+nlp = load_spacy_model()
 
 # --- Functions ---
 
+@st.cache_resource
+def load_sentiment_pipeline():
+    return pipeline("sentiment-analysis")
+
+@st.cache_resource
+def load_emotion_pipeline():
+    return pipeline("text-classification", model="SamLowe/roberta-base-go_emotions")
+
+@st.cache_resource
+def load_keyword_pipeline():
+    return pipeline("text2text-generation", model="google/flan-t5-base")
+
 def analyze_sentiment(text):
-   try:
-        analysis = TextBlob(text)
-        polarity = analysis.sentiment.polarity
-        if polarity > 0.1:
-            return {"label": "Positive", "score": polarity}
-        elif polarity < -0.1:
-            return {"label": "Negative", "score": polarity}
-        else:
-            return {"label": "Neutral", "score": polarity}
-   except Exception as e:
+    try:
+        sentiment_result = load_sentiment_pipeline()(text[:512])
+        return sentiment_result[0]
+    except Exception as e:
         st.error(f"Error during sentiment analysis: {e}")
         return {"label": "Error", "score": 0.0}
 
-#No emotion analysis as it used transformer pipeline
 def analyze_emotions(text):
-    return {"label": "Not Available", "score": 0.0}
+    try:
+        emotions_result = load_emotion_pipeline()(text[:512])
+        return emotions_result
+    except Exception as e:
+        st.error(f"Error during emotion analysis: {e}")
+        return [{"label": "Error", "score": 0.0}]
 
 def extract_keywords(text):
     try:
-        # Simple keyword extraction based on frequency
-        text = text.lower()
-        text = re.sub('[' + string.punctuation + ']', '', text)  # Remove punctuation
-        words = text.split()
-        stopwords = set([
-            "i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours",
-            "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers",
-            "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves",
-            "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are",
-            "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does",
-            "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until",
-            "while", "of", "at", "by", "for", "with", "about", "against", "between", "into",
-            "through", "during", "before", "after", "above", "below", "to", "from", "up", "down",
-            "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here",
-            "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more",
-            "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so",
-            "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now"
-        ])
-        filtered_words = [word for word in words if word not in stopwords]
-        keyword_counts = Counter(filtered_words).most_common(10)
-        keywords = [word for word, count in keyword_counts]
-        return keywords
+        keyword_pipeline = load_keyword_pipeline()
+        prompt = f"Extract keywords: {text}"
+        keywords_result = keyword_pipeline(prompt[:512],  max_length=50, num_return_sequences=1)
+        return [res['generated_text'] for res in keywords_result]
     except Exception as e:
         st.error(f"Error during keyword extraction: {e}")
         return []
@@ -206,93 +218,107 @@ def use_app_theme(theme):
 
       [data-testid='stImage'] > div > img {{
           border-radius: 10px;
-         max_width: 200px;
+         max-width: 200px;
      }}
       </style>
       """, unsafe_allow_html=True,
     )
 
-# --- New Feature Functions ---
+def extract_ner(text):
+    try:
+        doc = nlp(text)
+        ner_results = [(ent.text, ent.label_) for ent in doc.ents]
+        return ner_results
+    except Exception as e:
+        st.error(f"Error during NER extraction: {e}")
+        return []
 
-def extract_named_entities(text):
-    return [] # Placeholder, as we're not using spaCy
+def analyze_pos_ratio(text):
+    try:
+        doc = nlp(text)
+        pos_counts = Counter(token.pos_ for token in doc)
+        total_tokens = len(doc)
+        pos_ratios = {pos: count / total_tokens for pos, count in pos_counts.items()}
+        return pos_ratios
+    except Exception as e:
+        st.error(f"Error during POS analysis: {e}")
+        return {}
 
-def analyze_pos_tags(text):
-   return {} # Placeholder, as we're not using spaCy
-
-def calculate_stopword_density(text):
-    text = text.lower()
-    text = re.sub('[' + string.punctuation + ']', '', text)  # Remove punctuation
-    words = text.split()
-    stopwords = set([
-        "i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours",
-        "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers",
-        "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves",
-        "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are",
-        "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does",
-        "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until",
-        "while", "of", "at", "by", "for", "with", "about", "against", "between", "into",
-        "through", "during", "before", "after", "above", "below", "to", "from", "up", "down",
-        "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here",
-        "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more",
-        "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so",
-        "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now"
-    ])
-    total_words = len(words)
-    if total_words == 0:
+def calculate_sentence_complexity(text):
+    try:
+        doc = nlp(text)
+        sentences = list(doc.sents)
+        if not sentences:
+            return 0.0
+        total_length = sum(len(str(sentence).split()) for sentence in sentences)
+        return total_length / len(sentences)
+    except Exception as e:
+        st.error(f"Error during sentence complexity analysis: {e}")
         return 0.0
-    stopword_count = len([w for w in words if w in stopwords])
-    return stopword_count / total_words
 
-def detect_passive_voice(text):
-    return []  # Placeholder, requires more complex parsing
+def analyze_stopword_density(text):
+    try:
+        words = text.lower().split()
+        stop_words = set(stopwords.words('english'))
+        filtered_words = [word for word in words if word in stop_words]
+        if not words:
+            return 0.0
+        stopword_density = len(filtered_words) / len(words)
+        return stopword_density
+    except Exception as e:
+        st.error(f"Error during stopword density analysis: {e}")
+        return 0.0
 
-def count_pronouns(text):
-    text = text.lower()
-    words = text.split()
-    pronoun_count = Counter(word for word in words if word in [
-            "i", "me", "my", "mine", "we", "us", "our", "ours",
-            "you", "your", "yours", "he", "him", "his", "she",
-            "her", "hers", "it", "its", "they", "them", "their", "theirs"
-        ])
-    return pronoun_count
+def calculate_readability_score(text):
+    try:
+        return textstat.flesch_reading_ease(text)
+    except Exception as e:
+        st.error(f"Error during readability score calculation: {e}")
+        return 0.0
 
-def count_first_third_person(text):
-   text = text.lower()
-   words = text.split()
-   first_person_count = sum(1 for word in words if word in ["i", "me", "my", "mine", "we", "us", "our", "ours"])
-   third_person_count = sum(1 for word in words if word in ["he", "him", "his", "she", "her", "hers", "it", "its"])
-   return first_person_count, third_person_count
+def analyze_pronoun_density(text):
+    try:
+        doc = nlp(text)
+        pronoun_count = sum(1 for token in doc if token.pos_ == "PRON")
+        total_tokens = len(doc)
+        if total_tokens == 0:
+            return 0.0
+        return pronoun_count / total_tokens
+    except Exception as e:
+        st.error(f"Error during pronoun density analysis: {e}")
+        return 0.0
 
-def correct_grammar(text):
-     return str(TextBlob(text).correct())
+def detect_perspective(text):
+    try:
+        doc = nlp(text)
+        first_person_count = sum(1 for token in doc if token.lemma_ in ("I", "we", "me", "us", "my", "mine", "our", "ours"))
+        third_person_count = sum(1 for token in doc if token.lemma_ in ("he", "she", "it", "him", "her", "his", "hers", "its", "they", "them", "their", "theirs"))
+        return first_person_count, third_person_count
+    except Exception as e:
+        st.error(f"Error during perspective detection: {e}")
+        return 0, 0
 
-def count_transition_words(text):
-    text = text.lower()
-    words = text.split()
-    transition_words = ["however", "therefore", "in addition", "moreover", "consequently", "as a result", "for example"]
-    count = sum(1 for word in words if word in transition_words)
-    return count
+def keyword_frequency_counter(text):
+    try:
+        stop_words = set(stopwords.words('english'))
+        words = text.lower().split()
+        filtered_words = [word for word in words if word not in stop_words and word.isalpha()]
+        word_counts = Counter(filtered_words)
+        most_common = word_counts.most_common(10)
+        return most_common
+    except Exception as e:
+        st.error(f"Error during keyword frequency counting: {e}")
+        return []
 
-# Replaced sumy summarization with a simple extractive summarization
-def summarize_text(text, num_sentences=3):
-   sentences = re.split(r'[.!?]+', text) # Split by common sentence delimiters
-   sentences = [s.strip() for s in sentences if s.strip()]  # Remove empty strings
-
-   # Calculate sentence scores based on keyword frequency
-   keywords = extract_keywords(text)
-   sentence_scores = {}
-   for i, sentence in enumerate(sentences):
-        sentence_scores[i] = 0
-        for word in keywords:
-            if word in sentence.lower():
-                sentence_scores[i] += 1
-
-   # Select top N sentences with highest scores
-   top_sentences_idx = nlargest(num_sentences, sentence_scores, key=sentence_scores.get)
-   top_sentences = [sentences[i] for i in sorted(top_sentences_idx) if i < len(sentences)]  # Check for index validity!
-
-   return " ".join(top_sentences)
+def analyze_transition_strength(text):
+    try:
+        transition_words = ["however", "therefore", "in addition", "for example", "in conclusion", "on the other hand", "furthermore", "moreover", "besides", "thus"]
+        words = text.lower().split()
+        transition_count = sum(1 for word in words if word in transition_words)
+        return transition_count
+    except Exception as e:
+        st.error(f"Error during transition strength analysis: {e}")
+        return 0
 
 # Define the relative path for the logo
 logo_path = "logo.png"
@@ -311,10 +337,10 @@ with st.sidebar:
     st.title("⚙️ Settings & Info")
     st.markdown("---")
     st.subheader("📌 About the App")
-    st.write("Perform text analysis including sentiment and keyword extraction.")
+    st.write("Perform text analysis including sentiment, emotion, and keyword extraction.")
     st.markdown("---")
     with st.expander("💡 Model Details"):
-        st.write("This app uses basic text processing techniques.")
+        st.write("This app leverages pre-trained transformer models from the Hugging Face Transformers library and SpaCy.")
     st.markdown("---")
     with st.expander("📖 Usage Guide"):
         st.markdown("""
@@ -329,6 +355,7 @@ with st.sidebar:
 use_app_theme(DEFAULT_THEME)
 
 # ---- Main App Content ----
+# No Image
 
 # Title styling
 st.markdown(f"""
@@ -351,7 +378,6 @@ with tab1:  # Text Analysis
 
     if text_input:
         with st.spinner('Processing the text...'):
-            # --- Core analyses ---
             sentiment_result = analyze_sentiment(text_input)
             emotion_result = analyze_emotions(text_input)
             keywords = extract_keywords(text_input)
@@ -364,18 +390,14 @@ with tab1:  # Text Analysis
             lexical_diversity = calculate_lexical_diversity(text_input)
             sentence_count = count_sentences(text_input)
             avg_word_length = analyze_average_word_length(text_input)
-
-            # --- Newly Implemented Features ---
-            named_entities = extract_named_entities(text_input)
-            pos_counts = analyze_pos_tags(text_input)
-            stopword_density = calculate_stopword_density(text_input)
-            passive_sentences = detect_passive_voice(text_input)
-            pronoun_counts = count_pronouns(text_input)
-            first_person_count, third_person_count = count_first_third_person(text_input)
-            #keyword_counts = count_keywords(text_input) #not in used and remove it
-            corrected_text = correct_grammar(text_input)
-            transition_word_count = count_transition_words(text_input)
-            text_summary = summarize_text(text_input)
+            ner_results = extract_ner(text_input)
+            pos_ratios = analyze_pos_ratio(text_input)
+            stopword_density = analyze_stopword_density(text_input)
+            readability_score = calculate_readability_score(text_input)
+            pronoun_density = analyze_pronoun_density(text_input)
+            first_person_count, third_person_count = detect_perspective(text_input)
+            keyword_frequencies = keyword_frequency_counter(text_input)
+            transition_strength = analyze_transition_strength(text_input)
 
             # --- Display Results ---
             col1, col2 = st.columns(2)
@@ -385,17 +407,17 @@ with tab1:  # Text Analysis
                 if sentiment_result['label'] == "Error":
                     st.error("Sentiment Analysis Failed")
                 else:
-                    st.metric("Sentiment", value=sentiment_result['label'], delta=round(sentiment_result['score'], 2))
+                    st.metric("Sentiment", value=sentiment_result['label'], delta=sentiment_result['score'])
 
                 with st.expander("📌 TextBlob Sentiment Analysis"):
                     st.metric("Polarity", value=round(textblob_sentiment[0], 2))
                     st.metric("Subjectivity", value=round(textblob_sentiment[1], 2))
 
             with col2:
-                #st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>✨Other Metrics</h3>",
-                #            unsafe_allow_html=True)
-                st.write("")
-                #st.metric(emotion['label'], value=round(emotion['score'], 2))
+                st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>💖 Emotion Classification</h3>",
+                            unsafe_allow_html=True)
+                for emotion in emotion_result:
+                    st.metric(emotion['label'], value=round(emotion['score'], 2))
 
             st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>🔑 Keyword Extraction</h3>",
                         unsafe_allow_html=True)
@@ -423,48 +445,201 @@ with tab1:  # Text Analysis
             st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'> ☁️ Word Cloud Visualization</h3>",
                         unsafe_allow_html=True)
             wordcloud_fig = generate_wordcloud(text_input, theme=theme)
-            if wordcloud_fig:  # Check if the figure was successfully created
+            if wordcloud_fig:
                 st.pyplot(wordcloud_fig)
 
-            # --- Display New Features ---
-            st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>✨ Additional Analysis</h3>", unsafe_allow_html=True)
-            st.subheader("Named Entities")
-            st.write(named_entities)
+            # --- Display SpaCy Features ---
+            with st.expander("📚 Linguistic Analysis"):
+                st.subheader("Named Entity Recognition")
+                st.write(ner_results)
 
-            st.subheader("Part-of-Speech Counts")
-            st.write(pos_counts)
+                st.subheader("Part-of-Speech Ratios")
+                st.write(pos_ratios)
 
-            st.subheader("Stopword Density")
-            st.write(round(stopword_density, 2))
+                st.subheader("Sentence Complexity")
+                st.write(calculate_sentence_complexity(text_input))
 
-            st.subheader("Readability Score (Flesch-Kincaid)")
-            st.write(round(readability_score, 2))
+                st.subheader("Stopword Density")
+                st.write(stopword_density)
 
-            st.subheader("Passive Voice Sentences")
-            st.write(passive_sentences)
+                st.subheader("Readability Score")
+                st.write(readability_score)
 
-            st.subheader("Pronoun Counts")
-            st.write(pronoun_counts)
+                st.subheader("Pronoun Density")
+                st.write(pronoun_density)
 
-            st.subheader("First Person vs Third Person")
-            st.write(f"First Person: {first_person_count}, Third Person: {third_person_count}")
+                st.subheader("Perspective Detection")
+                st.write(f"First Person: {first_person_count}, Third Person: {third_person_count}")
 
-            st.subheader("Corrected Text (Grammar)")
-            st.write(corrected_text)
+                st.subheader("Keyword Frequencies")
+                st.write(keyword_frequencies)
 
-            st.subheader("Transition Word Count")
-            st.write(transition_word_count)
-
-            st.subheader("Text Summary")
-            st.write(text_summary)
+                st.subheader("Transition Strength")
+                st.write(transition_strength)
 
 with tab2:  # File Upload
     st.header("File Upload & Batch Processing")
     uploaded_file = st.file_uploader("Drag & Drop CSV/TXT file here", type=["csv", "txt"], accept_multiple_files=False)
 
     if uploaded_file:
-        st.write("File upload processing has not yet been implemented to incorporate the additional functionality of tab 1.")
+        with st.spinner('Processing the file...'):
+            try:
+                if uploaded_file.name.endswith(".csv"):
+                    df = pd.read_csv(uploaded_file)
+                    if 'text' not in df.columns:
+                        st.error("CSV file must have a 'text' column.", icon="🚨")
+                        st.stop()
+                    texts = df['text'].tolist()
+
+                elif uploaded_file.name.endswith(".txt"):
+                    text_file = uploaded_file.read().decode('utf-8')
+                    texts = [text_file]
+                else:
+                    st.error("Unsupported file type. Please upload a CSV or TXT file.", icon="🚨")
+                    st.stop()
+
+                # --- Perform Analysis ---
+                sentiments = []
+                emotions = []
+                keywords_list = []
+                textblob_sentiments = []
+                reading_times = []
+                lexical_diversities = []
+                sentence_counts = []
+                avg_word_lengths = []
+                ner_results_list = []
+                pos_ratios_list = []
+                stopword_densities = []
+                readability_scores = []
+                pronoun_densities = []
+                first_third_person_counts = []
+                keyword_frequencies_list = []
+                transition_strengths = []
+
+                for text in texts:
+                    sentiments.append(analyze_sentiment(text))
+                    emotions.append(analyze_emotions(text))
+                    keywords_list.append(extract_keywords(text))
+                    textblob_sentiments.append(analyze_textblob_sentiment(text))
+                    reading_times.append(estimate_reading_time(text))
+                    lexical_diversities.append(calculate_lexical_diversity(text))
+                    sentence_counts.append(count_sentences(text))
+                    avg_word_lengths.append(analyze_average_word_length(text))
+                    ner_results_list.append(extract_ner(text))
+                    pos_ratios_list.append(analyze_pos_ratio(text))
+                    stopword_densities.append(analyze_stopword_density(text))
+                    readability_scores.append(calculate_readability_score(text))
+                    pronoun_densities.append(analyze_pronoun_density(text))
+                    first_third_person_counts.append(detect_perspective(text))
+                    keyword_frequencies_list.append(keyword_frequency_counter(text))
+                    transition_strengths.append(analyze_transition_strength(text))
+
+                # --- Process TextBlob Analysis ---
+                textblob_polarity = [sentiment[0] for sentiment in textblob_sentiments]
+                textblob_subjectivity = [sentiment[1] for sentiment in textblob_sentiments]
+
+                # --- Process Sentiment Analysis ---
+                sentiment_labels = [sentiment['label'] for sentiment in sentiments]
+                sentiment_scores = [sentiment['score'] for sentiment in sentiments]
+
+                # --- Process Emotion Analysis ---
+                emotion_labels = []
+                for emotion_list in emotions:
+                    emotion_labels.append(emotion_list[0]['label'] if emotion_list else 'No Emotion')
+                emotion_scores = []
+                for emotion_list in emotions:
+                    emotion_scores.append(emotion_list[0]['score'] if emotion_list else 0)
+
+                # --- Create DataFrame ---
+                if uploaded_file.name.endswith(".csv"):
+                    df['sentiment'] = sentiment_labels
+                    df['sentiment_score'] = sentiment_scores
+                    df['emotion'] = emotion_labels
+                    df['emotion_score'] = emotion_scores
+                    df['keywords'] = [", ".join(keywords) for keywords in keywords_list]
+                    df['textblob_polarity'] = textblob_polarity
+                    df['textblob_subjectivity'] = textblob_subjectivity
+                    df['reading_time'] = reading_times
+                    df['lexical_diversity'] = lexical_diversities
+                    df['sentence_count'] = sentence_counts
+                    df['avg_word_length'] = avg_word_lengths
+                    df['ner_results'] = [str(ner) for ner in ner_results_list]  # Convert lists to strings
+                    df['pos_ratios'] = [str(pos) for pos in pos_ratios_list]  # Convert dictionaries to strings
+                    df['stopword_density'] = stopword_densities
+                    df['readability_score'] = readability_scores
+                    df['pronoun_density'] = pronoun_densities
+                    df['first_third_person'] = [str(ft) for ft in first_third_person_counts]  # Convert tuples to strings
+                    df['keyword_frequencies'] = [str(kf) for kf in keyword_frequencies_list]  # Convert list to string
+                    df['transition_strength'] = transition_strengths
+
+                elif uploaded_file.name.endswith(".txt"):
+                    df = pd.DataFrame({
+                        'text': texts,
+                        'sentiment': sentiment_labels,
+                        'sentiment_score': sentiment_scores,
+                        'emotion': emotion_labels,
+                        'emotion_score': emotion_scores,
+                        'keywords': [", ".join(keywords) for keywords in keywords_list],
+                        'textblob_polarity': textblob_polarity,
+                        'textblob_subjectivity': textblob_subjectivity,
+                        'reading_time': reading_times,
+                        'lexical_diversity': lexical_diversities,
+                        'sentence_count': sentence_counts,
+                        'avg_word_length': avg_word_lengths,
+                        'ner_results': [str(ner) for ner in ner_results_list],  # Convert lists to strings
+                        'pos_ratios': [str(pos) for pos in pos_ratios_list],  # Convert dictionaries to strings
+                        'stopword_density': stopword_densities,
+                        'readability_score': readability_scores,
+                        'pronoun_density': pronoun_densities,
+                        'first_third_person': [str(ft) for ft in first_third_person_counts],  # Convert tuples to strings
+                        'keyword_frequencies': [str(kf) for kf in keyword_frequencies_list],  # Convert list to string
+                        'transition_strength': transition_strengths
+                    })
+
+                st.subheader("Analysis Results")
+                st.dataframe(df, height=300)
+
+            except Exception as e:
+                st.error(f"An error occurred during file processing: {e}", icon="🚨")
 
 with tab3:  # Visualization & Reports
-    st.header("Visualization & Reports")
-    st.write("Visualization and reporting have not yet been implemented.")
+    if uploaded_file and 'df' in locals() and not df.empty:
+        st.header("Visualization & Reports")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Download Results as CSV")
+            display_download_button(df, "csv", "analysis_results")
+        with col2:
+            st.subheader("Download Results as JSON")
+            display_download_button(df, "json", "analysis_results")
+
+        # Sentiment Distribution Pie Chart
+        sentiment_counts = df['sentiment'].value_counts()
+        fig_sentiment = px.pie(sentiment_counts, values=sentiment_counts.values, names=sentiment_counts.index,
+                                title="Sentiment Distribution",
+                                color_discrete_sequence=px.colors.sequential.Plasma)
+        st.plotly_chart(fig_sentiment)
+
+        # Emotion Distribution Bar Chart
+        emotion_counts = df['emotion'].value_counts()
+        fig_emotion = px.bar(emotion_counts, x=emotion_counts.index, y=emotion_counts.values,
+                             title="Emotion Distribution",
+                             color_discrete_sequence=px.colors.sequential.Viridis)
+        fig_emotion.update_layout(xaxis_title="Emotion", yaxis_title="Count")
+        st.plotly_chart(fig_emotion)
+
+        # Reading Time Distribution Histogram (Example)
+        fig_reading_time = px.histogram(df, x="reading_time", title="Reading Time Distribution",
+                                        color_discrete_sequence=px.colors.sequential.Cividis)
+        fig_reading_time.update_layout(xaxis_title="Reading Time (minutes)", yaxis_title="Frequency")
+        st.plotly_chart(fig_reading_time)
+
+        # Lexical Diversity Scatter Plot
+        fig_lexical_diversity = px.scatter(df, x=df.index, y="lexical_diversity", title="Lexical Diversity Over Text Index")
+        fig_lexical_diversity.update_layout(xaxis_title="Text Index", yaxis_title="Lexical Diversity")
+        st.plotly_chart(fig_lexical_diversity)
+
+    elif uploaded_file:
+        st.warning("No data available to visualize. Ensure file processing was successful.")
+    else:
+        st.info("Upload a file to view visualizations.")
