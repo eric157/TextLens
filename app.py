@@ -44,10 +44,9 @@ DEFAULT_THEME = "dark"
 def load_spacy_model():
     try:
         return spacy.load("en_core_web_sm")
-    except OSError:
-        st.warning("Downloading en_core_web_sm model. This may take a minute...")
-        spacy.cli.download("en_core_web_sm")
-        return spacy.load("en_core_web_sm")
+    except OSError as e:
+        st.error(f"Error loading spaCy model: {e}.  Please ensure 'en_core_web_sm' is in requirements.txt")
+        return None
 
 
 # --- Load models ---
@@ -76,6 +75,8 @@ def analyze_emotions(text):
 
 def extract_keywords(text):
     try:
+        if nlp is None: # If spacy wasn't loaded because of errors
+            return []
         doc = nlp(text)
         stopwords = nlp.Defaults.stop_words
         keywords = []
@@ -217,16 +218,22 @@ def use_app_theme(theme):
 # --- New Feature Functions ---
 
 def extract_named_entities(text):
+    if nlp is None:
+        return []
     doc = nlp(text)
     entities = [(ent.text, ent.label_) for ent in doc.ents]
     return entities
 
 def analyze_pos_tags(text):
+    if nlp is None:
+        return {}
     doc = nlp(text)
     pos_counts = Counter(token.pos_ for token in doc)
     return pos_counts
 
 def calculate_stopword_density(text):
+    if nlp is None:
+        return 0.0
     doc = nlp(text)
     stopwords = nlp.Defaults.stop_words
     words = [token.text for token in doc]
@@ -237,6 +244,8 @@ def calculate_stopword_density(text):
     return stopword_count / total_words
 
 def detect_passive_voice(text):
+    if nlp is None:
+       return []
     doc = nlp(text)
     passive_sentences = []
     for sent in doc.sents:
@@ -247,11 +256,15 @@ def detect_passive_voice(text):
     return passive_sentences
 
 def count_pronouns(text):
+    if nlp is None:
+        return {}
     doc = nlp(text)
     pronoun_count = Counter(token.lemma_ for token in doc if token.pos_ == "PRON")
     return pronoun_count
 
 def count_first_third_person(text):
+    if nlp is None:
+        return (0, 0)
     doc = nlp(text)
     first_person = ["I", "me", "my", "mine", "we", "us", "our", "ours"]
     third_person = ["he", "him", "his", "she", "her", "hers", "it", "its", "they", "them", "their", "theirs"]
@@ -260,6 +273,8 @@ def count_first_third_person(text):
     return first_person_count, third_person_count
 
 def count_keywords(text):
+    if nlp is None:
+       return []
     doc = nlp(text)
     stopwords = nlp.Defaults.stop_words
     words = [token.text.lower() for token in doc if not token.is_punct and not token.is_space]
@@ -272,13 +287,18 @@ def correct_grammar(text):
      return str(TextBlob(text).correct())
 
 def count_transition_words(text):
-    transition_words = ["however", "therefore", "in addition", "moreover", "consequently", "as a result", "for example"]
+    if nlp is None:
+        return 0
+
     doc = nlp(text)
+    transition_words = ["however", "therefore", "in addition", "moreover", "consequently", "as a result", "for example"]
     count = sum(1 for token in doc if token.text.lower() in transition_words)
     return count
 
 # Replaced sumy summarization with a simple extractive summarization
 def summarize_text(text, num_sentences=3):
+    if nlp is None:
+        return ""
     doc = nlp(text)
     sentences = [sent.text for sent in doc.sents]  # Extract sentences
     if not sentences:
@@ -399,9 +419,9 @@ with tab1:  # Text Analysis
                     st.metric("Subjectivity", value=round(textblob_sentiment[1], 2))
 
             with col2:
-                st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>✨Other Metrics</h3>",
-                            unsafe_allow_html=True)
-                st.write("This Section removed, it needs more resources, feel free to run locally!")
+                #st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>✨Other Metrics</h3>",
+                #            unsafe_allow_html=True)
+                st.write("")
                 #st.metric(emotion['label'], value=round(emotion['score'], 2))
 
             st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>🔑 Keyword Extraction</h3>",
