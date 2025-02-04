@@ -9,7 +9,6 @@ Pillow
 plotly
 streamlit_extras
 streamlit_option_menu
-spacy
+spacy>=3.0.0,<4.0.0
 textstat
 nltk
-en_core_web_sm
