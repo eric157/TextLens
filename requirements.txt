@@ -1,8 +1,13 @@
 streamlit
-spacy
-textblob
 transformers
-torch
+pandas
 matplotlib
+wordcloud
+textblob
+streamlit_lottie
+requests
+Pillow
+plotly
+streamlit_extras
+streamlit_option_menu
 emoji
-python-dotenv
