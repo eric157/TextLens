@@ -6,19 +6,13 @@ from wordcloud import WordCloud
 import io
 import re
 import emoji
+from textblob import TextBlob
 import requests
 from PIL import Image
 import plotly.express as px
 from streamlit_extras.app_logo import add_logo
 from streamlit_option_menu import option_menu
 import os
-
-
-import textstat  # For readability scores
-
-import stylecloud
-
-import language_tool_python # Grammar and spelling checks
 
 # --- Page Settings ---
 st.set_page_config(
@@ -45,45 +39,10 @@ DARK_MODE = {
 }
 DEFAULT_THEME = "dark"
 
-# --- Load LanguageTool ---
-@st.cache_resource
-def load_language_tool():
-    tool = language_tool_python.LanguageTool('en-US')
-    return tool
-
-language_tool = load_language_tool()
-
-# --- Helper Functions for New Features ---
-
-
-@st.cache_data
-def calculate_sentence_complexity_score(text):
-    sentences = re.split(r'[.!?]+', text)
-    num_sentences = len(sentences) - 1 if sentences else 0
-    if num_sentences == 0:
-        return 0
-
-    total_length = sum(len(sentence.split()) for sentence in sentences if sentence)
-    avg_sentence_length = total_length / num_sentences
-
-    subordinate_conjunctions = ["because", "although", "if", "since", "while", "unless", "until", "when", "where"]
-    num_subordinate_clauses = sum(sentence.lower().count(conj) for sentence in sentences for conj in subordinate_conjunctions)
-    subordinate_ratio = num_subordinate_clauses / num_sentences if num_sentences > 0 else 0
-
-    return avg_sentence_length + subordinate_ratio
-
-@st.cache_data
-def check_grammar_and_spelling(text):
-    matches = language_tool.check(text)
-    errors = []
-    for match in matches:
-        if match.replacements:
-            errors.append((match.ruleId, match.message, text[match.offset:match.offset + match.errorLength], match.replacements[0])) # ADDING THE OFFENDING WORD
-        else:
-            errors.append((match.ruleId, match.message, text[match.offset:match.offset + match.errorLength], ""))
-    return errors
 
 # --- Functions ---
+# Removed Lottie Loading Function
+
 @st.cache_resource
 def load_sentiment_pipeline():
     return pipeline("sentiment-analysis")
@@ -126,19 +85,16 @@ def extract_keywords(text):
 
 
 def generate_wordcloud(text, theme="light"):
-    color = "white" if theme == "light" else "black"  # Stylecloud uses black for dark backgrounds
+    color = "white" if theme == "light" else "#181818"
     try:
-        stylecloud.gen_stylecloud(
-            text=text[:512],
-            background_color=color,
-            icon_name='fas fa-cloud',  # Choose an icon
-            palette='cartocolors.sequential.Plasma_7',  # Use a palette from cartocolors
-            output_name='wordcloud.png'  # Save as a file
-        )
-        return 'wordcloud.png'  # Return the filename for display
+        wordcloud = WordCloud(width=800, height=400, background_color=color, colormap='viridis').generate(text[:512])  # Use viridis colormap
+        plt.figure(figsize=(10, 5))
+        plt.imshow(wordcloud, interpolation='bilinear')
+        plt.axis("off")
+        return plt
     except Exception as e:
         st.error(f"Error during wordcloud generation: {e}")
-        return None
+        return None  # Or some other placeholder
 
 def analyze_hashtags(text):
     try:
@@ -155,6 +111,14 @@ def analyze_emojis(text):
     except Exception as e:
         st.error(f"Error during emoji analysis: {e}")
         return []
+
+def analyze_textblob_sentiment(text):
+    try:
+        analysis = TextBlob(text)
+        return analysis.sentiment.polarity, analysis.sentiment.subjectivity
+    except Exception as e:
+        st.error(f"Error during TextBlob sentiment analysis: {e}")
+        return 0.0, 0.0
 
 def estimate_reading_time(text):
     words = len(text.split())
@@ -180,7 +144,6 @@ def analyze_average_word_length(text):
     total_length = sum(len(word) for word in words)
     return total_length / len(words)
 
-
 def display_download_button(df, file_format, filename):
     if not df.empty:
         try:
@@ -192,7 +155,7 @@ def display_download_button(df, file_format, filename):
                                     mime="text/csv")
             elif file_format == "json":
                 json_content = df.to_json(orient="records").encode('utf-8')
-                st.download_button(label=f"Download {filename}.json", data=csv_content, file_name=f"{filename}.json",
+                st.download_button(label=f"Download {filename}.json", data=json_content, file_name=f"{filename}.json",
                                     mime="application/json")
         except Exception as e:
             st.error(f"Error during download button creation: {e}")
@@ -241,30 +204,6 @@ def use_app_theme(theme):
           border-radius: 10px;
          max-width: 200px;
      }}
-       /* Style the tab labels */
-    .stTabs [data-baseweb="tab-list"] button[role="tab"] {{
-        color: {colors['grey_text']}; /* Inactive tab color */
-        background-color: {colors['secondary_background']};
-        padding: 0.5em 1em; /* Adjust padding as needed */
-        border-top-left-radius: 0.5em; /* Rounded corners */
-        border-top-right-radius: 0.5em;
-        border-bottom: none; /* Remove bottom border */
-    }}
-
-    /* Style the active tab label */
-    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {{
-        color: {colors['text_color']}; /* Active tab color */
-        background-color: {colors['background_color']};
-        border-bottom: none !important; /* Override Streamlit's border */
-    }}
-
-    /* Style the tab content area */
-    .stTabs [data-baseweb="tab-panel"] {{
-        background-color: {colors['background_color']};
-        padding: 1em;
-        border-radius: 0.5em;
-        border: 1px solid {colors['secondary_background']};
-    }}
       </style>
       """, unsafe_allow_html=True,
     )
@@ -314,98 +253,24 @@ st.markdown(f"""
 
 MAX_WORDS = 300  # setting max value of inputs
 
-# --- Tabs Configuration ---
 tab1, tab2, tab3 = st.tabs(["Text Analysis", "File Upload", "Visualization & Reports"])
 theme = DEFAULT_THEME
 
-# --- Central Styling Configuration ---
-def apply_styles():
-    colors = DARK_MODE if DEFAULT_THEME == "dark" else LIGHT_MODE  # Get current theme colors
-
-    st.markdown(
-        f"""
-        <style>
-        .reportview-container .main .block-container{{
-            max-width: 90%;
-            padding-top: 5rem;
-            padding-right: 5rem;
-            padding-left: 5rem;
-            padding-bottom: 5rem;
-        }}
-        h1, h2, h3, h4, h5, h6 {{
-            color: {colors['primary_color']};
-        }}
-        .stButton>button {{
-            color: #4F8BF9;
-            border-radius: 10px;
-            border: 2px solid #4F8BF9;
-            font-weight: bold;
-            padding: 0.5em 1em;
-        }}
-        .stButton>button:hover {{
-            background-color: #4F8BF9;
-            color: white;
-        }}
-        .css-1cpxqw2 {{ /* Adjust Checkbox Font */
-            font-size: 1rem !important;
-        }}
-        /* Style the tab labels */
-        .stTabs [data-baseweb="tab-list"] button[role="tab"] {{
-            color: {colors['grey_text']}; /* Inactive tab color */
-            background-color: {colors['secondary_background']};
-            padding: 0.5em 1em; /* Adjust padding as needed */
-            border-top-left-radius: 0.5em; /* Rounded corners */
-            border-top-right-radius: 0.5em;
-            border-bottom: none; /* Remove bottom border */
-        }}
-
-        /* Style the active tab label */
-        .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {{
-            color: {colors['text_color']}; /* Active tab color */
-            background-color: {colors['background_color']};
-            border-bottom: none !important; /* Override Streamlit's border */
-        }}
-
-        /* Style the tab content area */
-        .stTabs [data-baseweb="tab-panel"] {{
-            background-color: {colors['background_color']};
-            padding: 1em;
-            border-radius: 0.5em;
-            border: 1px solid {colors['secondary_background']};
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-apply_styles() #apply styling
-# --- Text Analysis Tab ---
 with tab1:  # Text Analysis
-    st.header("Text Analysis Dashboard", divider="rainbow")  # Modern header
-
+    st.header("Text Analysis")
     st.markdown(f"Enter text for analysis (Maximum: {MAX_WORDS} words):", unsafe_allow_html=True)
     text_input = st.text_area("Enter text for analysis:", height=150, key="text_area", max_chars=MAX_WORDS * 7)
     word_count = len(text_input.split())
     st.markdown(f'<div id="word-count">Word count: {word_count}</div>', unsafe_allow_html=True)  # show words limit
 
-    # --- Feature Toggles ---
-    st.subheader("Analysis Options", divider="blue")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        show_readability = st.checkbox("Show Readability Scores")
-
-    with col2:
-        show_complexity = st.checkbox("Show Sentence Complexity")
-        show_grammar_errors = st.checkbox("Check Grammar and Spelling")
-
     if text_input:
-        with st.spinner('Analyzing Text...'):
+        with st.spinner('Processing the text...'):
             sentiment_result = analyze_sentiment(text_input)
             emotion_result = analyze_emotions(text_input)
             keywords = extract_keywords(text_input)
             hashtags = analyze_hashtags(text_input)
             emojis = analyze_emojis(text_input)
+            textblob_sentiment = analyze_textblob_sentiment(text_input)
 
             # --- Additional Minimalist Features ---
             reading_time = estimate_reading_time(text_input)
@@ -413,61 +278,54 @@ with tab1:  # Text Analysis
             sentence_count = count_sentences(text_input)
             avg_word_length = analyze_average_word_length(text_input)
 
-            # --- Metrics Display ---
-            st.subheader("Key Metrics", divider="green")
-            col1, col2, col3 = st.columns(3)
-
+            # --- Display Results ---
+            col1, col2 = st.columns(2)
             with col1:
-                st.metric("Sentiment", value=sentiment_result['label'], delta=sentiment_result['score'])
+                st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>📊 Sentiment Analysis</h3>",
+                            unsafe_allow_html=True)
+                if sentiment_result['label'] == "Error":
+                    st.error("Sentiment Analysis Failed")
+                else:
+                    st.metric("Sentiment", value=sentiment_result['label'], delta=sentiment_result['score'])
+
+                with st.expander("📌 TextBlob Sentiment Analysis"):
+                    st.metric("Polarity", value=round(textblob_sentiment[0], 2))
+                    st.metric("Subjectivity", value=round(textblob_sentiment[1], 2))
+
             with col2:
-                st.metric("Reading Time (mins)", reading_time)
-            with col3:
-                st.metric("Lexical Diversity", round(lexical_diversity, 2))
+                st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>💖 Emotion Classification</h3>",
+                            unsafe_allow_html=True)
+                for emotion in emotion_result:
+                    st.metric(emotion['label'], value=round(emotion['score'], 2))
 
-            col4, col5 = st.columns(2)
-
-            with col4:
-                 st.metric("Sentence Count", sentence_count)
-            with col5:
-                 st.metric("Avg. Word Length", round(avg_word_length, 2)) # adding it to the UI on request
-
-            st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>🔑 Keywords</h3>", unsafe_allow_html=True)
+            st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>🔑 Keyword Extraction</h3>",
+                        unsafe_allow_html=True)
             st.write(", ".join(keywords))
+
             if hashtags:
                 st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>#️⃣ Hashtags</h3>", unsafe_allow_html=True)
                 st.write(", ".join(hashtags))
+
             if emojis:
                 st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>😀 Emojis</h3>", unsafe_allow_html=True)
                 st.write(" ".join(emojis))
 
-            # --- Implemented Features ---
-            st.subheader("Detailed Analysis", divider="violet")
+            # --- Display additional metrics ---
+            col3, col4, col5, col6 = st.columns(4)
+            with col3:
+                st.metric("Reading Time (mins)", reading_time)
+            with col4:
+                st.metric("Lexical Diversity", round(lexical_diversity, 2))
+            with col5:
+                st.metric("Sentence Count", sentence_count)
+            with col6:
+                st.metric("Avg. Word Length", round(avg_word_length, 2))
 
-            if show_readability:
-                st.subheader("Readability Scores")
-                flesch_kincaid = textstat.flesch_kincaid_grade(text_input)
-                st.metric("Flesch-Kincaid Grade Level", flesch_kincaid)
-
-            if show_complexity:
-                st.subheader("Sentence Complexity Score")
-                complexity_score = calculate_sentence_complexity_score(text_input)
-                st.metric("Complexity Score", round(complexity_score, 2))
-
-            if show_grammar_errors:
-                st.subheader("Grammar and Spelling Check")
-                grammar_errors = check_grammar_and_spelling(text_input)
-                if grammar_errors:
-                    st.warning("Potential Grammar and Spelling Errors Found!")
-                    for error_id, error_message, error_word, suggestion in grammar_errors:
-                        st.write(f"- **{error_message}** (Error: '{error_word}', Suggestion: '{suggestion}')")
-                else:
-                    st.success("No grammar or spelling errors found.")
-
-            st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'> ☁️ Word Cloud Visualization</h3>", unsafe_allow_html=True)
-            wordcloud_file = generate_wordcloud(text_input, theme=theme)
-            if wordcloud_file:  # Check if the file was successfully created
-                st.image(wordcloud_file)
-
+            st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'> ☁️ Word Cloud Visualization</h3>",
+                        unsafe_allow_html=True)
+            wordcloud_fig = generate_wordcloud(text_input, theme=theme)
+            if wordcloud_fig:  # Check if the figure was successfully created
+                st.pyplot(wordcloud_fig)
 
 with tab2:  # File Upload
     st.header("File Upload & Batch Processing")
@@ -494,6 +352,7 @@ with tab2:  # File Upload
                 sentiments = []
                 emotions = []
                 keywords_list = []
+                textblob_sentiments = []
                 reading_times = []
                 lexical_diversities = []
                 sentence_counts = []
@@ -503,10 +362,15 @@ with tab2:  # File Upload
                     sentiments.append(analyze_sentiment(text))
                     emotions.append(analyze_emotions(text))
                     keywords_list.append(extract_keywords(text))
+                    textblob_sentiments.append(analyze_textblob_sentiment(text))
                     reading_times.append(estimate_reading_time(text))
                     lexical_diversities.append(calculate_lexical_diversity(text))
                     sentence_counts.append(count_sentences(text))
                     avg_word_lengths.append(analyze_average_word_length(text))
+
+                # --- Process TextBlob Analysis ---
+                textblob_polarity = [sentiment[0] for sentiment in textblob_sentiments]
+                textblob_subjectivity = [sentiment[1] for sentiment in textblob_sentiments]
 
                 # --- Process Sentiment Analysis ---
                 sentiment_labels = [sentiment['label'] for sentiment in sentiments]
@@ -527,6 +391,8 @@ with tab2:  # File Upload
                     df['emotion'] = emotion_labels
                     df['emotion_score'] = emotion_scores
                     df['keywords'] = [", ".join(keywords) for keywords in keywords_list]
+                    df['textblob_polarity'] = textblob_polarity
+                    df['textblob_subjectivity'] = textblob_subjectivity
                     df['reading_time'] = reading_times
                     df['lexical_diversity'] = lexical_diversities
                     df['sentence_count'] = sentence_counts
@@ -540,6 +406,8 @@ with tab2:  # File Upload
                         'emotion': emotion_labels,
                         'emotion_score': emotion_scores,
                         'keywords': [", ".join(keywords) for keywords in keywords_list],
+                        'textblob_polarity': textblob_polarity,
+                        'textblob_subjectivity': textblob_subjectivity,
                         'reading_time': reading_times,
                         'lexical_diversity': lexical_diversities,
                         'sentence_count': sentence_counts,
@@ -583,6 +451,7 @@ with tab3:  # Visualization & Reports
                                         color_discrete_sequence=px.colors.sequential.Cividis)  # Distribution Chart for Reading Time
         fig_reading_time.update_layout(xaxis_title="Reading Time (minutes)", yaxis_title="Frequency")
         st.plotly_chart(fig_reading_time)
+
 
     elif uploaded_file:
         st.warning("No data available to visualize. Ensure file processing was successful.")
