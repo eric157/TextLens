@@ -3,11 +3,9 @@ transformers
 pandas
 matplotlib
 wordcloud
-textblob
-streamlit_lottie
 requests
 Pillow
-streamlit_extras
-streamlit_option_menu
 plotly
-spacy
+nltk
+textblob
+streamlit_lottie
