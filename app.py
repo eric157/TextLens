@@ -13,12 +13,12 @@ import plotly.express as px
 from streamlit_extras.app_logo import add_logo
 from streamlit_option_menu import option_menu
 import os
-import stylecloud
 
 import nltk  # For text preprocessing visualization
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
+import nltk.data
 
 import textstat  # For readability scores
 import langdetect  # For language detection
@@ -46,6 +46,7 @@ try:
 except LookupError:
     nltk.download('wordnet')
     wordnet_lemmatizer = WordNetLemmatizer()
+
 try:
     word_tokenize("example")
 except LookupError:
@@ -53,6 +54,13 @@ except LookupError:
 
 stop_words = set(stopwords.words('english'))
 wordnet_lemmatizer = WordNetLemmatizer()
+
+# --- Download WordNet if it's not already available ---
+try:
+    nltk.data.find('corpora/wordnet')
+except LookupError:
+    st.warning("Downloading NLTK 'wordnet' corpus. This might take a few moments.")
+    nltk.download('wordnet')
 
 # Define Theme colors (simplified)
 LIGHT_MODE = {
@@ -587,6 +595,7 @@ with tab1:  # Text Analysis
             if wordcloud_file:  # Check if the file was successfully created
                 st.image(wordcloud_file)
 
+
 with tab2:  # File Upload
     st.header("File Upload & Batch Processing")
     uploaded_file = st.file_uploader("Drag & Drop CSV/TXT file here", type=["csv", "txt"], accept_multiple_files=False)
@@ -711,6 +720,7 @@ with tab3:  # Visualization & Reports
                                         color_discrete_sequence=px.colors.sequential.Cividis)  # Distribution Chart for Reading Time
         fig_reading_time.update_layout(xaxis_title="Reading Time (minutes)", yaxis_title="Frequency")
         st.plotly_chart(fig_reading_time)
+
     elif uploaded_file:
         st.warning("No data available to visualize. Ensure file processing was successful.")
     else:
