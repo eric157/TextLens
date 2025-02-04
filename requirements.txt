@@ -3,9 +3,15 @@ transformers
 pandas
 matplotlib
 wordcloud
+textblob
 requests
 Pillow
 plotly
+streamlit_extras
+streamlit_option_menu
 nltk
-textblob
-streamlit_lottie
+textstat
+langdetect
+spacy
+language_tool_python
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.0.0/en_core_web_sm-3.0.0-py3-none-any.whl

@@ -7,27 +7,24 @@ import io
 import re
 import emoji
 from textblob import TextBlob
-from streamlit_lottie import st_lottie
 import requests
 from PIL import Image
 import plotly.express as px
-import nltk
+from streamlit_extras.app_logo import add_logo
+from streamlit_option_menu import option_menu
+import os
+
+import nltk  # For text preprocessing visualization
 from nltk.corpus import stopwords
-from collections import Counter
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize
 
-# Download required NLTK data
-try:
-    nltk.data.find("corpora/stopwords")
-except LookupError:
-    nltk.download("stopwords")
+import textstat  # For readability scores
+import langdetect  # For language detection
 
-try:
-    nltk.data.find("tokenizers/punkt")
-except LookupError:
-    nltk.download("punkt")
+import spacy  # For NER and POS tagging
 
-from nltk.tokenize import word_tokenize, sent_tokenize
-
+import language_tool_python # Grammar and spelling checks
 
 # --- Page Settings ---
 st.set_page_config(
@@ -36,6 +33,25 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# --- Download NLTK Resources (Run once) ---
+try:
+    stop_words = set(stopwords.words('english'))
+except LookupError:
+    nltk.download('stopwords')
+    stop_words = set(stopwords.words('english'))
+try:
+    wordnet_lemmatizer = WordNetLemmatizer()
+except LookupError:
+    nltk.download('wordnet')
+    wordnet_lemmatizer = WordNetLemmatizer()
+try:
+    word_tokenize("example")
+except LookupError:
+    nltk.download('punkt')
+
+stop_words = set(stopwords.words('english'))
+wordnet_lemmatizer = WordNetLemmatizer()
 
 # Define Theme colors (simplified)
 LIGHT_MODE = {
@@ -54,18 +70,94 @@ DARK_MODE = {
 }
 DEFAULT_THEME = "dark"
 
+# --- Load spaCy Model ---
+@st.cache_resource
+def load_spacy_model():
+    try:
+        nlp = spacy.load("en_core_web_sm")
+    except OSError:
+        st.warning("Downloading spaCy 'en_core_web_sm' model. This might take a few moments.")
+        spacy.cli.download("en_core_web_sm")  # Download if not found
+        nlp = spacy.load("en_core_web_sm")
+    return nlp
+
+nlp = load_spacy_model()
+
+# --- Load LanguageTool ---
+@st.cache_resource
+def load_language_tool():
+    tool = language_tool_python.LanguageTool('en-US')
+    return tool
+
+language_tool = load_language_tool()
+
+# --- Helper Functions for New Features ---
+@st.cache_data
+def preprocess_text(text):
+    text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
+    tokens = word_tokenize(text.lower())  # Tokenize and lowercase
+    tokens = [token for token in tokens if token not in stop_words]  # Remove stopwords
+    tokens = [wordnet_lemmatizer.lemmatize(token) for token in tokens]  # Lemmatize
+    return " ".join(tokens)
+
+@st.cache_data
+def get_pos_distribution(text):
+    doc = nlp(text)
+    pos_counts = {}
+    for token in doc:
+        pos = token.pos_
+        if pos in pos_counts:
+            pos_counts[pos] += 1
+        else:
+            pos_counts[pos] = 1
+    total = sum(pos_counts.values())
+    pos_percentages = {pos: count / total * 100 for pos, count in pos_counts.items()}
+    return pos_percentages
+
+@st.cache_data
+def extract_named_entities(text):
+    doc = nlp(text)
+    entities = [(ent.text, ent.label_) for ent in doc.ents]
+    return entities
+
+@st.cache_data
+def calculate_sentence_complexity_score(text):
+    sentences = re.split(r'[.!?]+', text)
+    num_sentences = len(sentences) - 1 if sentences else 0
+    if num_sentences == 0:
+        return 0
+
+    total_length = sum(len(sentence.split()) for sentence in sentences if sentence)
+    avg_sentence_length = total_length / num_sentences
+
+    subordinate_conjunctions = ["because", "although", "if", "since", "while", "unless", "until", "when", "where"]
+    num_subordinate_clauses = sum(sentence.lower().count(conj) for sentence in sentences for conj in subordinate_conjunctions)
+    subordinate_ratio = num_subordinate_clauses / num_sentences if num_sentences > 0 else 0
+
+    return avg_sentence_length + subordinate_ratio
+
+@st.cache_data
+def analyze_stopword_density(text):
+    tokens = word_tokenize(text.lower())
+    total_words = len(tokens)
+    if total_words == 0:
+        return 0
+    stopword_count = len([word for word in tokens if word in stop_words])
+    stopword_density = stopword_count / total_words
+    return stopword_density
+
+@st.cache_data
+def check_grammar_and_spelling(text):
+    matches = language_tool.check(text)
+    errors = []
+    for match in matches:
+        if match.replacements:
+            errors.append((match.ruleId, match.message, text[match.offset:match.offset + match.errorLength], match.replacements[0])) # ADDING THE OFFENDING WORD
+        else:
+            errors.append((match.ruleId, match.message, text[match.offset:match.offset + match.errorLength], ""))
+    return errors
 
 # --- Functions ---
-#@st.cache_resource #REMOVED THIS
-def load_lottieurl(url):
-    try:
-        r = requests.get(url)
-        r.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-        return r.json()
-    except requests.exceptions.RequestException as e:
-        st.error(f"Error loading Lottie animation: {e}")
-        return None
-
 @st.cache_resource
 def load_sentiment_pipeline():
     return pipeline("sentiment-analysis")
@@ -167,57 +259,6 @@ def analyze_average_word_length(text):
     total_length = sum(len(word) for word in words)
     return total_length / len(words)
 
-def identify_named_entities(text):
-    # Use regex for simplistic identification (not robust NER)
-    patterns = {
-        "Person": r"\b[A-Z][a-z]+ [A-Z][a-z]+\b",  # Simple name pattern
-        "Organization": r"\b[A-Z][a-z]+ (Inc\.|Corp\.|Ltd\.)\b",  # Simplistic org
-        "Location": r"\b[A-Z][a-z]+, [A-Z][a-z]+\b" # City, Country
-    }
-
-    entities = {}
-    for entity_type, pattern in patterns.items():
-        matches = re.findall(pattern, text)
-        if matches:
-            entities[entity_type] = matches
-    return entities
-
-def analyze_text_complexity(text):
-    # Flesch Reading Ease (simplified)
-    sentences = sent_tokenize(text)
-    words = word_tokenize(text)
-    if not sentences or not words:
-        return 0.0  # Avoid division by zero
-
-    avg_sentence_length = len(words) / len(sentences)
-    avg_syllables_per_word = 1.5  # Very crude estimate!
-
-    # Simplified Flesch formula (only using sentence length)
-    reading_ease = 206.835 - (1.015 * avg_sentence_length) - (84.6 * avg_syllables_per_word)
-
-    return reading_ease
-
-def find_most_common_words(text, n=10):
-    # Tokenize, remove stop words, and find most frequent words
-    stop_words = set(stopwords.words('english'))
-    words = word_tokenize(text.lower())
-    filtered_words = [w for w in words if w.isalpha() and w not in stop_words]  # Remove punctuation
-    word_counts = Counter(filtered_words)
-    return word_counts.most_common(n)
-
-
-def analyze_reading_level(text):
-    # Use sentence count and average word length to estimate reading level (very basic)
-    sentence_count = len(sent_tokenize(text))
-    word_count = len(word_tokenize(text))
-
-    if sentence_count == 0 or word_count == 0:
-        return "N/A"
-
-    avg_words_per_sentence = word_count / sentence_count
-    estimated_grade_level = round((0.4 * (avg_words_per_sentence + analyze_average_word_length(text))))
-
-    return estimated_grade_level
 
 def display_download_button(df, file_format, filename):
     if not df.empty:
@@ -279,13 +320,36 @@ def use_app_theme(theme):
           border-radius: 10px;
          max-width: 200px;
      }}
+       /* Style the tab labels */
+    .stTabs [data-baseweb="tab-list"] button[role="tab"] {{
+        color: {colors['grey_text']}; /* Inactive tab color */
+        background-color: {colors['secondary_background']};
+        padding: 0.5em 1em; /* Adjust padding as needed */
+        border-top-left-radius: 0.5em; /* Rounded corners */
+        border-top-right-radius: 0.5em;
+        border-bottom: none; /* Remove bottom border */
+    }}
+
+    /* Style the active tab label */
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {{
+        color: {colors['text_color']}; /* Active tab color */
+        background-color: {colors['background_color']};
+        border-bottom: none !important; /* Override Streamlit's border */
+    }}
+
+    /* Style the tab content area */
+    .stTabs [data-baseweb="tab-panel"] {{
+        background-color: {colors['background_color']};
+        padding: 1em;
+        border-radius: 0.5em;
+        border: 1px solid {colors['secondary_background']};
+    }}
       </style>
       """, unsafe_allow_html=True,
     )
 
 # Define the relative path for the logo
 logo_path = "logo.png"
-
 
 # Verify logo path before applying
 try:
@@ -319,27 +383,6 @@ with st.sidebar:
 use_app_theme(DEFAULT_THEME)
 
 # ---- Main App Content ----
-#lottie_url = 'https://lottie.host/8ef588a6-1e2f-4797-9c06-1655b9253efb/zFj7X4kX6J.json'
-#lottie_json = load_lottieurl(lottie_url)
-#if lottie_json:
-#    st_lottie(lottie_json, speed=1, height=180, quality='high')
-#Here is replacement of lottie code
-def load_lottiefile(filepath: str):
-    with open(filepath, "r") as f:
-        return json.load(f)
-
-lottie_coding = load_lottiefile("lottie.json")
-
-st_lottie(
-    lottie_coding,
-    speed=1,
-    reverse=False,
-    loop=True,
-    quality="low",
-    height=None,
-    width=None,
-    key=None,
-)
 
 # Title styling
 st.markdown(f"""
@@ -350,18 +393,98 @@ st.markdown(f"""
 
 MAX_WORDS = 300  # setting max value of inputs
 
+# --- Tabs Configuration ---
 tab1, tab2, tab3 = st.tabs(["Text Analysis", "File Upload", "Visualization & Reports"])
 theme = DEFAULT_THEME
 
+# --- Central Styling Configuration ---
+def apply_styles():
+    colors = DARK_MODE if DEFAULT_THEME == "dark" else LIGHT_MODE  # Get current theme colors
+
+    st.markdown(
+        f"""
+        <style>
+        .reportview-container .main .block-container{{
+            max-width: 90%;
+            padding-top: 5rem;
+            padding-right: 5rem;
+            padding-left: 5rem;
+            padding-bottom: 5rem;
+        }}
+        h1, h2, h3, h4, h5, h6 {{
+            color: {colors['primary_color']};
+        }}
+        .stButton>button {{
+            color: #4F8BF9;
+            border-radius: 10px;
+            border: 2px solid #4F8BF9;
+            font-weight: bold;
+            padding: 0.5em 1em;
+        }}
+        .stButton>button:hover {{
+            background-color: #4F8BF9;
+            color: white;
+        }}
+        .css-1cpxqw2 {{ /* Adjust Checkbox Font */
+            font-size: 1rem !important;
+        }}
+        /* Style the tab labels */
+        .stTabs [data-baseweb="tab-list"] button[role="tab"] {{
+            color: {colors['grey_text']}; /* Inactive tab color */
+            background-color: {colors['secondary_background']};
+            padding: 0.5em 1em; /* Adjust padding as needed */
+            border-top-left-radius: 0.5em; /* Rounded corners */
+            border-top-right-radius: 0.5em;
+            border-bottom: none; /* Remove bottom border */
+        }}
+
+        /* Style the active tab label */
+        .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {{
+            color: {colors['text_color']}; /* Active tab color */
+            background-color: {colors['background_color']};
+            border-bottom: none !important; /* Override Streamlit's border */
+        }}
+
+        /* Style the tab content area */
+        .stTabs [data-baseweb="tab-panel"] {{
+            background-color: {colors['background_color']};
+            padding: 1em;
+            border-radius: 0.5em;
+            border: 1px solid {colors['secondary_background']};
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+apply_styles() #apply styling
+# --- Text Analysis Tab ---
 with tab1:  # Text Analysis
-    st.header("Text Analysis")
+    st.header("Text Analysis Dashboard", divider="rainbow")  # Modern header
+
     st.markdown(f"Enter text for analysis (Maximum: {MAX_WORDS} words):", unsafe_allow_html=True)
     text_input = st.text_area("Enter text for analysis:", height=150, key="text_area", max_chars=MAX_WORDS * 7)
     word_count = len(text_input.split())
     st.markdown(f'<div id="word-count">Word count: {word_count}</div>', unsafe_allow_html=True)  # show words limit
 
+    # --- Feature Toggles ---
+    st.subheader("Analysis Options", divider="blue")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        show_preprocessing = st.checkbox("Show Preprocessed Text")
+        show_readability = st.checkbox("Show Readability Scores")
+        detect_language = st.checkbox("Detect Language")
+        show_pos_distribution = st.checkbox("Show POS Tag Distribution")
+
+    with col2:
+        show_ner = st.checkbox("Show Named Entity Recognition")
+        show_complexity = st.checkbox("Show Sentence Complexity")
+        show_stopword_density = st.checkbox("Show Stopword Density")
+        show_grammar_errors = st.checkbox("Check Grammar and Spelling")
+
     if text_input:
-        with st.spinner('Processing the text...'):
+        with st.spinner('Analyzing Text...'):
             sentiment_result = analyze_sentiment(text_input)
             emotion_result = analyze_emotions(text_input)
             keywords = extract_keywords(text_input)
@@ -374,73 +497,92 @@ with tab1:  # Text Analysis
             lexical_diversity = calculate_lexical_diversity(text_input)
             sentence_count = count_sentences(text_input)
             avg_word_length = analyze_average_word_length(text_input)
-            named_entities = identify_named_entities(text_input)
-            text_complexity = analyze_text_complexity(text_input)
-            most_common_words = find_most_common_words(text_input)
-            reading_level = analyze_reading_level(text_input)
 
-            # --- Display Results ---
-            col1, col2 = st.columns(2)
+            # --- Metrics Display ---
+            st.subheader("Key Metrics", divider="green")
+            col1, col2, col3, col4 = st.columns(4)
+
             with col1:
-                st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>📊 Sentiment Analysis</h3>",
-                            unsafe_allow_html=True)
-                if sentiment_result['label'] == "Error":
-                    st.error("Sentiment Analysis Failed")
-                else:
-                    st.metric("Sentiment", value=sentiment_result['label'], delta=sentiment_result['score'])
+                st.metric("Sentiment", value=sentiment_result['label'], delta=sentiment_result['score'])
+            with col2:
+                st.metric("Reading Time (mins)", reading_time)
+            with col3:
+                st.metric("Lexical Diversity", round(lexical_diversity, 2))
+            with col4:
+                st.metric("Sentence Count", sentence_count)
 
-                with st.expander("📌 TextBlob Sentiment Analysis"):
+            col5, col6 = st.columns(2)
+            with col5:
+                with st.expander("TextBlob Sentiment Analysis"):
                     st.metric("Polarity", value=round(textblob_sentiment[0], 2))
                     st.metric("Subjectivity", value=round(textblob_sentiment[1], 2))
+            with col6:
+                 st.metric("Avg. Word Length", round(avg_word_length, 2)) # adding it to the UI on request
 
-            with col2:
-                st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>💖 Emotion Classification</h3>",
-                            unsafe_allow_html=True)
-                for emotion in emotion_result:
-                    st.metric(emotion['label'], value=round(emotion['score'], 2))
-
-            st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>🔑 Keyword Extraction</h3>",
-                        unsafe_allow_html=True)
+            st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>🔑 Keywords</h3>", unsafe_allow_html=True)
             st.write(", ".join(keywords))
-
             if hashtags:
                 st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>#️⃣ Hashtags</h3>", unsafe_allow_html=True)
                 st.write(", ".join(hashtags))
-
             if emojis:
                 st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>😀 Emojis</h3>", unsafe_allow_html=True)
                 st.write(" ".join(emojis))
 
-            # --- Display additional metrics ---
-            col3, col4, col5, col6 = st.columns(4)
-            with col3:
-                st.metric("Reading Time (mins)", reading_time)
-            with col4:
-                st.metric("Lexical Diversity", round(lexical_diversity, 2))
-            with col5:
-                st.metric("Sentence Count", sentence_count)
-            with col6:
-                st.metric("Avg. Word Length", round(avg_word_length, 2))
+            # --- Implemented Features ---
+            st.subheader("Detailed Analysis", divider="violet")
+            if show_preprocessing:
+                st.subheader("Text Preprocessing")
+                preprocessed_text = preprocess_text(text_input)
+                st.write(preprocessed_text)
 
-            col7, col8 = st.columns(2)
-            with col7:
-                st.metric("Text Complexity", round(text_complexity, 2))
-            with col8:
-                st.metric("Estimated Reading Level", reading_level)
+            if show_readability:
+                st.subheader("Readability Scores")
+                flesch_kincaid = textstat.flesch_kincaid_grade(text_input)
+                st.metric("Flesch-Kincaid Grade Level", flesch_kincaid)
 
-            st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'> 📍 Identified Named Entities</h3>",
-                        unsafe_allow_html=True)
-            st.write(named_entities)
+            if detect_language:
+                st.subheader("Language Detection")
+                try:
+                    language = langdetect.detect(text_input)
+                    st.write(f"Detected Language: {language}")
+                except langdetect.LangDetectException:
+                    st.warning("Could not detect language.")
 
-            st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'> 💬 Most Common Words</h3>",
-                        unsafe_allow_html=True)
-            st.write(most_common_words)
+            if show_pos_distribution:
+                st.subheader("Part-of-Speech Tag Distribution")
+                pos_counts = get_pos_distribution(text_input)
+                st.write(pos_counts)
 
-            st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'> ☁️ Word Cloud Visualization</h3>",
-                        unsafe_allow_html=True)
+            if show_ner:
+                st.subheader("Named Entity Recognition")
+                entities = extract_named_entities(text_input)
+                st.write(entities)
+
+            if show_complexity:
+                st.subheader("Sentence Complexity Score")
+                complexity_score = calculate_sentence_complexity_score(text_input)
+                st.metric("Complexity Score", round(complexity_score, 2))
+
+            if show_stopword_density:
+                st.subheader("Stopword Density")
+                stopword_density = analyze_stopword_density(text_input)
+                st.metric("Stopword Density", round(stopword_density, 2))
+
+            if show_grammar_errors:
+                st.subheader("Grammar and Spelling Check")
+                grammar_errors = check_grammar_and_spelling(text_input)
+                if grammar_errors:
+                    st.warning("Potential Grammar and Spelling Errors Found!")
+                    for error_id, error_message, error_word, suggestion in grammar_errors:
+                        st.write(f"- **{error_message}** (Error: '{error_word}', Suggestion: '{suggestion}')")
+                else:
+                    st.success("No grammar or spelling errors found.")
+
+            st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'> ☁️ Word Cloud Visualization</h3>",unsafe_allow_html=True)
             wordcloud_fig = generate_wordcloud(text_input, theme=theme)
             if wordcloud_fig:  # Check if the figure was successfully created
                 st.pyplot(wordcloud_fig)
+
 
 with tab2:  # File Upload
     st.header("File Upload & Batch Processing")
@@ -472,10 +614,6 @@ with tab2:  # File Upload
                 lexical_diversities = []
                 sentence_counts = []
                 avg_word_lengths = []
-                named_entities_list = []
-                text_complexities = []
-                most_common_words_list = []
-                reading_levels = []
 
                 for text in texts:
                     sentiments.append(analyze_sentiment(text))
@@ -486,10 +624,6 @@ with tab2:  # File Upload
                     lexical_diversities.append(calculate_lexical_diversity(text))
                     sentence_counts.append(count_sentences(text))
                     avg_word_lengths.append(analyze_average_word_length(text))
-                    named_entities_list.append(identify_named_entities(text))
-                    text_complexities.append(analyze_text_complexity(text))
-                    most_common_words_list.append(find_most_common_words(text))
-                    reading_levels.append(analyze_reading_level(text))
 
                 # --- Process TextBlob Analysis ---
                 textblob_polarity = [sentiment[0] for sentiment in textblob_sentiments]
@@ -520,11 +654,6 @@ with tab2:  # File Upload
                     df['lexical_diversity'] = lexical_diversities
                     df['sentence_count'] = sentence_counts
                     df['avg_word_length'] = avg_word_lengths
-                    df['named_entities'] = named_entities_list
-                    df['text_complexity'] = text_complexities
-                    df['most_common_words'] = most_common_words_list
-                    df['reading_level'] = reading_levels
-
 
                 elif uploaded_file.name.endswith(".txt"):
                     df = pd.DataFrame({
@@ -539,11 +668,7 @@ with tab2:  # File Upload
                         'reading_time': reading_times,
                         'lexical_diversity': lexical_diversities,
                         'sentence_count': sentence_counts,
-                        'avg_word_length': avg_word_lengths,
-                        'named_entities': named_entities_list,
-                        'text_complexity': text_complexities,
-                        'most_common_words': most_common_words_list,
-                         'reading_level': reading_levels
+                        'avg_word_length': avg_word_lengths
                     })
 
                 st.subheader("Analysis Results")
@@ -583,9 +708,7 @@ with tab3:  # Visualization & Reports
                                         color_discrete_sequence=px.colors.sequential.Cividis)  # Distribution Chart for Reading Time
         fig_reading_time.update_layout(xaxis_title="Reading Time (minutes)", yaxis_title="Frequency")
         st.plotly_chart(fig_reading_time)
-
-        # Lexical Diversity Histogram
-        fig_lexical_diversity = px.histogram(df, x="lexical_diversity", title="Lexical Diversity Distribution",
-                                            color_discrete_sequence=px.colors.sequential.Sunset)
-        fig_lexical_diversity.update_layout(xaxis_title="Lexical Diversity Score", yaxis_title="Frequency")
-        st.plotly_chart(fig_lexical_diversity)
+    elif uploaded_file:
+        st.warning("No data available to visualize. Ensure file processing was successful.")
+    else:
+        st.info("Upload a file to view visualizations.")
