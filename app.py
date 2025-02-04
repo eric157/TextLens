@@ -13,7 +13,6 @@ import spacy
 from collections import Counter
 from textstat import flesch_reading_ease
 from heapq import nlargest
-import fasttext
 
 # --- Page Settings ---
 st.set_page_config(
@@ -51,23 +50,8 @@ def load_spacy_model():
         return spacy.load("en_core_web_sm")
 
 
-# --- Load FastText model ---
-@st.cache_resource
-def load_fasttext_model():
-    try:
-        # Try loading a model that is in the same directory if it exists
-        return fasttext.load_model("emotion_model.bin")
-    except:
-        st.warning("Pre-trained emotion model not found, replacing with sentiment model")
-        try:
-            return fasttext.load_model("lid.176.bin")
-        except:
-            st.error("Please download a model online or train with your own!")
-            return None
-
 # --- Load models ---
 nlp = load_spacy_model()
-ft_model = load_fasttext_model()
 
 
 # --- Functions ---
@@ -86,17 +70,9 @@ def analyze_sentiment(text):
         st.error(f"Error during sentiment analysis: {e}")
         return {"label": "Error", "score": 0.0}
 
-# FastText implementation
+#No emotion analysis as it used transformer pipeline
 def analyze_emotions(text):
-    if ft_model:
-        try:
-            prediction = ft_model.predict(text)
-            return {"label": prediction[0][0], "score": 1.0}
-        except Exception as e:
-            st.error(f"Error during emotion analysis: {e}")
-            return {"label": "Error", "score": 0.0}
-    else:
-        return {"label": "Model Not Available", "score": 0.0}
+    return {"label": "Not Available", "score": 0.0}
 
 def extract_keywords(text):
     try:
@@ -340,7 +316,7 @@ with st.sidebar:
     st.title("⚙️ Settings & Info")
     st.markdown("---")
     st.subheader("📌 About the App")
-    st.write("Perform text analysis including sentiment, emotion, and keyword extraction.")
+    st.write("Perform text analysis including sentiment and keyword extraction.")
     st.markdown("---")
     with st.expander("💡 Model Details"):
         st.write("This app leverages pre-trained transformer models from the Hugging Face Transformers library.")
@@ -423,14 +399,10 @@ with tab1:  # Text Analysis
                     st.metric("Subjectivity", value=round(textblob_sentiment[1], 2))
 
             with col2:
-                st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>💖 Emotion Classification</h3>",
+                st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>✨Other Metrics</h3>",
                             unsafe_allow_html=True)
-                if ft_model:
-                  emotion_result = analyze_emotions(text_input)
-                  st.metric("Emotion", value=emotion_result['label'], delta=round(emotion_result['score'], 2))
-                else:
-                   st.write("Emotion Classification Model not Available")
-
+                st.write("This Section removed, it needs more resources, feel free to run locally!")
+                #st.metric(emotion['label'], value=round(emotion['score'], 2))
 
             st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>🔑 Keyword Extraction</h3>",
                         unsafe_allow_html=True)
@@ -483,9 +455,6 @@ with tab1:  # Text Analysis
 
             st.subheader("First Person vs Third Person")
             st.write(f"First Person: {first_person_count}, Third Person: {third_person_count}")
-
-            st.subheader("Keyword Counts")
-            st.write(keyword_counts)
 
             st.subheader("Corrected Text (Grammar)")
             st.write(corrected_text)
