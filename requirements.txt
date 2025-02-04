@@ -1,4 +1,5 @@
 streamlit
+transformers
 pandas
 matplotlib
 wordcloud
@@ -8,6 +9,3 @@ Pillow
 plotly
 spacy
 textstat
-sumy
-nltk
-transformers

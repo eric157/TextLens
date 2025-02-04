@@ -1,4 +1,5 @@
 import streamlit as st
+from transformers import pipeline
 import pandas as pd
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
@@ -12,11 +13,10 @@ import plotly.express as px
 import spacy
 from collections import Counter
 from textstat import flesch_reading_ease
-from sumy.parsers.plaintext import PlaintextParser
-from sumy.nlp.tokenizers import Tokenizer
-from sumy.summarizers.lex_rank import LexRankSummarizer
-import nltk
-from transformers import pipeline
+#from sumy.parsers.plaintext import PlaintextParser #REMOVED
+#from sumy.nlp.tokenizers import Tokenizer #REMOVED
+#from sumy.summarizers.lex_rank import LexRankSummarizer #REMOVED
+from heapq import nlargest
 
 # --- Page Settings ---
 st.set_page_config(
@@ -53,18 +53,13 @@ def load_spacy_model():
         spacy.cli.download("en_core_web_sm")
         return spacy.load("en_core_web_sm")
 
-@st.cache_resource
-def load_sentiment_pipeline():
-    return pipeline("sentiment-analysis")
-
-@st.cache_resource
-def load_emotion_pipeline():
-    return pipeline("text-classification", model="SamLowe/roberta-base-go_emotions")
 
 # --- Load models ---
 nlp = load_spacy_model()
 
+
 # --- Functions ---
+
 @st.cache_resource
 def load_sentiment_pipeline():
     return pipeline("sentiment-analysis")
@@ -73,10 +68,13 @@ def load_sentiment_pipeline():
 def load_emotion_pipeline():
     return pipeline("text-classification", model="SamLowe/roberta-base-go_emotions")
 
+@st.cache_resource
+def load_keyword_pipeline():
+    return pipeline("text2text-generation", model="google/flan-t5-base")
+
 def analyze_sentiment(text):
     try:
-        sentiment_pipeline = load_sentiment_pipeline()
-        sentiment_result = sentiment_pipeline(text[:512])
+        sentiment_result = load_sentiment_pipeline()(text[:512])
         return sentiment_result[0]
     except Exception as e:
         st.error(f"Error during sentiment analysis: {e}")
@@ -84,21 +82,21 @@ def analyze_sentiment(text):
 
 def analyze_emotions(text):
     try:
-        emotion_pipeline = load_emotion_pipeline()
-        emotions_result = emotion_pipeline(text[:512])
+        emotions_result = load_emotion_pipeline()(text[:512])
         return emotions_result
     except Exception as e:
         st.error(f"Error during emotion analysis: {e}")
         return [{"label": "Error", "score": 0.0}]
 
-# NEW KEYWORD EXTRACTION (No Transformers!)
-def extract_keywords(text, num_keywords=10):
-    doc = nlp(text)
-    stopwords = nlp.Defaults.stop_words
-    words = [token.text.lower() for token in doc if not token.is_punct and not token.is_space]
-    filtered_words = [word for word in words if word not in stopwords]  # Only nouns and adjectives
-    keyword_counts = Counter(filtered_words).most_common(num_keywords)
-    return keyword_counts
+def extract_keywords(text):
+    try:
+        keyword_pipeline = load_keyword_pipeline()
+        prompt = f"Extract keywords: {text}"
+        keywords_result = keyword_pipeline(prompt[:512],  max_length=50, num_return_sequences=1)
+        return [res['generated_text'] for res in keywords_result]
+    except Exception as e:
+        st.error(f"Error during keyword extraction: {e}")
+        return []
 
 def generate_wordcloud(text, theme="light"):
     color = "white" if theme == "light" else "#181818"
@@ -269,6 +267,14 @@ def count_first_third_person(text):
     third_person_count = sum(1 for token in doc if token.lemma_ in third_person)
     return first_person_count, third_person_count
 
+def count_keywords(text):
+    doc = nlp(text)
+    stopwords = nlp.Defaults.stop_words
+    words = [token.text.lower() for token in doc if not token.is_punct and not token.is_space]
+    filtered_words = [word for word in words if word not in stopwords]
+    keyword_counts = Counter(filtered_words).most_common(10)
+    return keyword_counts
+
 #Replaced language_tool_python with TextBlob
 def correct_grammar(text):
      return str(TextBlob(text).correct())
@@ -279,23 +285,27 @@ def count_transition_words(text):
     count = sum(1 for token in doc if token.text.lower() in transition_words)
     return count
 
-# --- Fix NLTK Issue with Sumy ---
-try:
-    nltk.data.find("tokenizers/punkt")
-except LookupError:
-    st.warning("Downloading NLTK data for sentence tokenization. This may take a moment...")
-    nltk.download("punkt")
-
-
+# Replaced sumy summarization with a simple extractive summarization
 def summarize_text(text, num_sentences=3):
-    parser = PlaintextParser.from_string(text, Tokenizer("english"))
-    summarizer = LexRankSummarizer()
-    try:
-        summary = summarizer(parser.document, num_sentences)  # Returns a list of sentences
-        return " ".join(str(sentence) for sentence in summary)
-    except Exception as e:
-        st.error(f"Error during summarization: {e}")
-        return "Error during summarization."
+    doc = nlp(text)
+    sentences = [sent.text for sent in doc.sents]  # Extract sentences
+    if not sentences:
+        return ""
+
+    # Calculate sentence scores based on keyword frequency
+    keywords = [word for word, count in count_keywords(text)] # Get top keywords
+    sentence_scores = {}
+    for i, sentence in enumerate(sentences):
+        sentence_scores[i] = 0
+        for word in keywords:
+            if word in sentence.lower():
+                sentence_scores[i] += 1
+
+    # Select top N sentences with highest scores
+    top_sentences_idx = nlargest(num_sentences, sentence_scores, key=sentence_scores.get)
+    top_sentences = [sentences[i] for i in sorted(top_sentences_idx)] # Maintain original order
+
+    return " ".join(top_sentences)
 
 # Define the relative path for the logo
 logo_path = "logo.png"
@@ -376,11 +386,11 @@ with tab1:  # Text Analysis
             passive_sentences = detect_passive_voice(text_input)
             pronoun_counts = count_pronouns(text_input)
             first_person_count, third_person_count = count_first_third_person(text_input)
-            transition_word_count = count_transition_words(text_input)
-            text_summary = summarize_text(text_input)
+            keyword_counts = count_keywords(text_input)
             # Using TextBlob for grammar correction
             corrected_text = correct_grammar(text_input)
-
+            transition_word_count = count_transition_words(text_input)
+            text_summary = summarize_text(text_input)
 
             # --- Display Results ---
             col1, col2 = st.columns(2)
@@ -404,7 +414,7 @@ with tab1:  # Text Analysis
 
             st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>🔑 Keyword Extraction</h3>",
                         unsafe_allow_html=True)
-            st.write(", ".join([f"{word} ({count})" for word, count in keywords]))
+            st.write(", ".join(keywords))
 
             if hashtags:
                 st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'>#️⃣ Hashtags</h3>", unsafe_allow_html=True)
@@ -453,6 +463,9 @@ with tab1:  # Text Analysis
 
             st.subheader("First Person vs Third Person")
             st.write(f"First Person: {first_person_count}, Third Person: {third_person_count}")
+
+            st.subheader("Keyword Counts")
+            st.write(keyword_counts)
 
             st.subheader("Corrected Text (Grammar)")
             st.write(corrected_text)
