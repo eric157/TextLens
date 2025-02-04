@@ -12,3 +12,4 @@ streamlit_option_menu
 spacy>=3.0.0,<4.0.0
 textstat
 nltk
+emoji
