@@ -54,13 +54,6 @@ except LookupError:
 stop_words = set(stopwords.words('english'))
 wordnet_lemmatizer = WordNetLemmatizer()
 
-# --- Download WordNet if it's not already available ---
-try:
-    nltk.data.find('corpora/wordnet')
-except LookupError:
-    st.warning("Downloading NLTK 'wordnet' corpus. This might take a few moments.")
-    nltk.download('wordnet')
-
 # Define Theme colors (simplified)
 LIGHT_MODE = {
     "primary_color": "#1E90FF",
@@ -100,13 +93,6 @@ def load_language_tool():
 language_tool = load_language_tool()
 
 # --- Helper Functions for New Features ---
-@st.cache_data
-def preprocess_text(text):
-    text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
-    tokens = word_tokenize(text.lower())  # Tokenize and lowercase
-    tokens = [token for token in tokens if token not in stop_words]  # Remove stopwords
-    tokens = [wordnet_lemmatizer.lemmatize(token) for token in tokens]  # Lemmatize
-    return " ".join(tokens)
 
 @st.cache_data
 def get_pos_distribution(text):
@@ -475,7 +461,6 @@ with tab1:  # Text Analysis
     col1, col2 = st.columns(2)
 
     with col1:
-        show_preprocessing = st.checkbox("Show Preprocessed Text")
         show_readability = st.checkbox("Show Readability Scores")
         detect_language = st.checkbox("Detect Language")
         show_pos_distribution = st.checkbox("Show POS Tag Distribution")
@@ -529,10 +514,6 @@ with tab1:  # Text Analysis
 
             # --- Implemented Features ---
             st.subheader("Detailed Analysis", divider="violet")
-            if show_preprocessing:
-                st.subheader("Text Preprocessing")
-                preprocessed_text = preprocess_text(text_input)
-                st.write(preprocessed_text)
 
             if show_readability:
                 st.subheader("Readability Scores")
