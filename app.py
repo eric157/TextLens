@@ -56,7 +56,7 @@ DEFAULT_THEME = "dark"
 
 
 # --- Functions ---
-@st.cache_resource
+#@st.cache_resource #REMOVED THIS
 def load_lottieurl(url):
     try:
         r = requests.get(url)
@@ -230,7 +230,7 @@ def display_download_button(df, file_format, filename):
                                     mime="text/csv")
             elif file_format == "json":
                 json_content = df.to_json(orient="records").encode('utf-8')
-                st.download_button(label=f"Download {filename}.json", data=json_content, file_name=f"{filename}.json",
+                st.download_button(label=f"Download {filename}.json", data=csv_content, file_name=f"{filename}.json",
                                     mime="application/json")
         except Exception as e:
             st.error(f"Error during download button creation: {e}")
@@ -319,10 +319,27 @@ with st.sidebar:
 use_app_theme(DEFAULT_THEME)
 
 # ---- Main App Content ----
-lottie_url = 'https://lottie.host/8ef588a6-1e2f-4797-9c06-1655b9253efb/zFj7X4kX6J.json'
-lottie_json = load_lottieurl(lottie_url)
-if lottie_json:
-    st_lottie(lottie_json, speed=1, height=180, quality='high')
+#lottie_url = 'https://lottie.host/8ef588a6-1e2f-4797-9c06-1655b9253efb/zFj7X4kX6J.json'
+#lottie_json = load_lottieurl(lottie_url)
+#if lottie_json:
+#    st_lottie(lottie_json, speed=1, height=180, quality='high')
+#Here is replacement of lottie code
+def load_lottiefile(filepath: str):
+    with open(filepath, "r") as f:
+        return json.load(f)
+
+lottie_coding = load_lottiefile("lottie.json")
+
+st_lottie(
+    lottie_coding,
+    speed=1,
+    reverse=False,
+    loop=True,
+    quality="low",
+    height=None,
+    width=None,
+    key=None,
+)
 
 # Title styling
 st.markdown(f"""
@@ -572,8 +589,3 @@ with tab3:  # Visualization & Reports
                                             color_discrete_sequence=px.colors.sequential.Sunset)
         fig_lexical_diversity.update_layout(xaxis_title="Lexical Diversity Score", yaxis_title="Frequency")
         st.plotly_chart(fig_lexical_diversity)
-
-    elif uploaded_file:
-        st.warning("No data available to visualize. Ensure file processing was successful.")
-    else:
-        st.info("Upload a file to view visualizations.")
