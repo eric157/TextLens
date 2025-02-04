@@ -8,4 +8,4 @@ Pillow==11.1.0
 plotly==5.24.1
 spacy==3.0.9
 textstat==0.7.4
-en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.0.0/en_core_web_sm-3.0.0-py3-none-any.whl#sha256=dfba97b3cb5c177f60c4087a5b4f5c9d7f5c0fce7150d8aa7c0aab4eb4811a07
+en-core-web-sm
