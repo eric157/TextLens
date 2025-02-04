@@ -14,8 +14,6 @@ import requests
 from PIL import Image
 import numpy as np
 from bertopic import BERTopic
-import nltk
-from nltk.tokenize import sent_tokenize
 import spacy
 from spacy import displacy
 import plotly.express as px
@@ -94,10 +92,6 @@ def load_toxicity_pipeline():
 @st.cache_resource
 def load_summarization_pipeline():
      return pipeline("summarization", model="facebook/bart-large-cnn")
-
-@st.cache_resource #Load spacy model for better results
-def load_spacy():
-    return spacy.load("en_core_web_sm")
 
 def analyze_sentiment(text):
     sentiment_result = load_sentiment_pipeline()(text[:512])
@@ -204,15 +198,7 @@ def analyze_aspect_sentiment(text, aspect):
     result = load_absa_pipeline()(f"{aspect} {text[:512]}")
     return result[0]
 
-def analyze_sentence_sentiment(text): # instead from  from nltk to Spacy and tokenize via that
-  nlp = load_spacy() #Loading nlp
-  doc = nlp(text)
-  sentences = [sent.text for sent in doc.sents] # spacy token
-  results = []
-  for sentence in sentences:
-     sentiment = analyze_sentiment(sentence)
-     results.append({"sentence": sentence, "sentiment": sentiment})
-  return results
+
 
 def detect_toxicity(text):
         toxicity_results = load_toxicity_pipeline()(text[:512])
@@ -302,10 +288,10 @@ with st.sidebar:
             **Text Analysis:**
             - Enter text in the text box for real-time analysis.
             **File Upload & Batch Processing:**
-               - Upload .csv or .txt files for batch processing. Ensure the csv file has a text column.
+               - Upload .csv or .txt files for batch processing. Ensure the text column.
              - Results can be downloaded.
            **Advanced Analysis:**
-             - Additional analysis such as NER, ABSA, Sentence Analysis, Summarization are also available.
+             - Additional analysis such as NER, ABSA, Summarization are also available.
            - The Text limit is 300 words
           """)
         st.markdown("---")
@@ -342,8 +328,8 @@ with tab1: # Text Analysis
      enable_ner = st.checkbox("Enable Named Entity Recognition")
      enable_absa = st.checkbox("Enable Aspect-Based Sentiment Analysis")
      absa_aspect = st.text_input("Enter aspect for ABSA (e.g., battery life):", disabled=not enable_absa)
-     enable_sentence_analysis = st.checkbox("Enable Sentence-Level Sentiment Analysis")
-     enable_toxicity_detection = st.checkbox("Enable Text Toxicity Detection")
+     #enable_sentence_analysis = st.checkbox("Enable Sentence-Level Sentiment Analysis") REMOVED
+     enable_toxicity_detection = st.checkbox("Enable Toxicity Detection")
      enable_summarization = st.checkbox("Enable Text Summarization")
 
      if text_input:
@@ -399,12 +385,15 @@ with tab1: # Text Analysis
                absa_result = analyze_aspect_sentiment(text_input, absa_aspect)
                st.metric(f"Sentiment towards '{absa_aspect}'", value=absa_result['label'], delta=absa_result['score'])
 
-           if enable_sentence_analysis:
-                st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'> 🔍 Sentence-Level Sentiment Analysis</h3>", unsafe_allow_html=True)
-                sentence_sentiments = analyze_sentence_sentiment(text_input)
-                for item in sentence_sentiments:
-                   st.markdown(f"- **Sentence:** {item['sentence']}")
-                   st.markdown(f"  **Sentiment:** {item['sentiment']['label']} (Score: {item['sentiment']['score']:.2f})")
+           #if enable_sentence_analysis: REMOVED
+
+                #st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'> 🔍 Sentence-Level Sentiment Analysis</h3>", unsafe_allow_html=True) #REMOVED
+
+              #  sentence_sentiments = analyze_sentence_sentiment(text_input) #REMOVED
+                #for item in sentence_sentiments: #REMOVED
+
+                  # st.markdown(f"- **Sentence:** {item['sentence']}") #REMOVED
+                   #st.markdown(f"  **Sentiment:** {item['sentiment']['label']} (Score: {item['sentiment']['score']:.2f})")# REMOVED
 
            if enable_toxicity_detection:
                 toxicity_result = detect_toxicity(text_input)
@@ -446,7 +435,7 @@ with tab2:  # File Upload
             sentiments = [analyze_sentiment(text) for text in texts]
             emotions = [analyze_emotions(text) for text in texts]
             keywords_list = [extract_keywords(text) for text in translated_texts]
-            sarcasm_results = [detect_sarcasm(text) for text in texts]
+            sarcasm_results = [detect_sarcasm(text) for text in translated_texts]
             textblob_sentiments = [analyze_textblob_sentiment(text) for text in texts]
 
             # --- Process TextBlob Analysis ---
