@@ -65,9 +65,9 @@ nlp = load_spacy_model()
 #def load_emotion_pipeline():
 #    return pipeline("text-classification", model="SamLowe/roberta-base-go_emotions")
 
-@st.cache_resource
-def load_keyword_pipeline():
-    return pipeline("text2text-generation", model="google/flan-t5-base")
+#@st.cache_resource #REMOVED
+#def load_keyword_pipeline(): #REMOVED
+#    return pipeline("text2text-generation", model="google/flan-t5-base")
 
 def analyze_sentiment(text):
    try:
@@ -89,10 +89,16 @@ def analyze_emotions(text):
 
 def extract_keywords(text):
     try:
-        keyword_pipeline = load_keyword_pipeline()
-        prompt = f"Extract keywords: {text}"
-        keywords_result = keyword_pipeline(prompt[:512],  max_length=50, num_return_sequences=1)
-        return [res['generated_text'] for res in keywords_result]
+        doc = nlp(text)
+        stopwords = nlp.Defaults.stop_words
+        keywords = []
+        for token in doc:
+            if (token.text.lower() not in stopwords and
+                token.is_alpha and
+                not token.is_punct and
+                (token.pos_ == "NOUN" or token.pos_ == "ADJ")):
+                keywords.append(token.text.lower())
+        return keywords
     except Exception as e:
         st.error(f"Error during keyword extraction: {e}")
         return []
@@ -215,7 +221,7 @@ def use_app_theme(theme):
 
       [data-testid='stImage'] > div > img {{
           border-radius: 10px;
-         max-width: 200px;
+         max_width: 200px;
      }}
       </style>
       """, unsafe_allow_html=True,
