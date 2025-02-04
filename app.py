@@ -13,6 +13,7 @@ import plotly.express as px
 from streamlit_extras.app_logo import add_logo
 from streamlit_option_menu import option_menu
 import os
+import stylecloud
 
 import nltk  # For text preprocessing visualization
 from nltk.corpus import stopwords
@@ -200,16 +201,19 @@ def extract_keywords(text):
 
 
 def generate_wordcloud(text, theme="light"):
-    color = "white" if theme == "light" else "#181818"
+    color = "white" if theme == "light" else "black"  # Stylecloud uses black for dark backgrounds
     try:
-        wordcloud = WordCloud(width=800, height=400, background_color=color, colormap='viridis').generate(text[:512])  # Use viridis colormap
-        plt.figure(figsize=(10, 5))
-        plt.imshow(wordcloud, interpolation='bilinear')
-        plt.axis("off")
-        return plt
+        stylecloud.gen_stylecloud(
+            text=text[:512],
+            background_color=color,
+            icon_name='fas fa-cloud',  # Choose an icon
+            palette='cartocolors.sequential.Plasma_7',  # Use a palette from cartocolors
+            output_name='wordcloud.png'  # Save as a file
+        )
+        return 'wordcloud.png'  # Return the filename for display
     except Exception as e:
         st.error(f"Error during wordcloud generation: {e}")
-        return None  # Or some other placeholder
+        return None
 
 def analyze_hashtags(text):
     try:
@@ -578,11 +582,10 @@ with tab1:  # Text Analysis
                 else:
                     st.success("No grammar or spelling errors found.")
 
-            st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'> ☁️ Word Cloud Visualization</h3>",unsafe_allow_html=True)
-            wordcloud_fig = generate_wordcloud(text_input, theme=theme)
-            if wordcloud_fig:  # Check if the figure was successfully created
-                st.pyplot(wordcloud_fig)
-
+            st.markdown(f"<h3 style='color:{DARK_MODE['primary_color']} ;'> ☁️ Word Cloud Visualization</h3>", unsafe_allow_html=True)
+            wordcloud_file = generate_wordcloud(text_input, theme=theme)
+            if wordcloud_file:  # Check if the file was successfully created
+                st.image(wordcloud_file)
 
 with tab2:  # File Upload
     st.header("File Upload & Batch Processing")
