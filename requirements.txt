@@ -13,4 +13,5 @@ textstat==0.7.3
 langdetect==1.0.9
 spacy==3.7.2
 language_tool_python
+emoji
 en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0-py3-none-any.whl
