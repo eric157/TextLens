@@ -1,10 +1,13 @@
 streamlit
+transformers
 pandas
 matplotlib
 wordcloud
 textblob
 streamlit_lottie
 requests
-pillow
-plotly
+Pillow
 streamlit_extras
+streamlit_option_menu
+plotly
+spacy
