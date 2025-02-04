@@ -9,10 +9,10 @@ from textblob import TextBlob
 import requests
 from PIL import Image
 import plotly.express as px
-import spacy
 from collections import Counter
 from textstat import flesch_reading_ease
 from heapq import nlargest
+import string
 
 # --- Page Settings ---
 st.set_page_config(
@@ -39,19 +39,6 @@ DARK_MODE = {
 }
 DEFAULT_THEME = "dark"
 
-# --- Load spaCy model ---
-@st.cache_resource
-def load_spacy_model():
-    try:
-        return spacy.load("en_core_web_sm")
-    except OSError as e:
-        st.error(f"Error loading spaCy model: {e}.  Please ensure 'en_core_web_sm' is in requirements.txt")
-        return None
-
-
-# --- Load models ---
-nlp = load_spacy_model()
-
 
 # --- Functions ---
 
@@ -75,17 +62,27 @@ def analyze_emotions(text):
 
 def extract_keywords(text):
     try:
-        if nlp is None: # If spacy wasn't loaded because of errors
-            return []
-        doc = nlp(text)
-        stopwords = nlp.Defaults.stop_words
-        keywords = []
-        for token in doc:
-            if (token.text.lower() not in stopwords and
-                token.is_alpha and
-                not token.is_punct and
-                (token.pos_ == "NOUN" or token.pos_ == "ADJ")):
-                keywords.append(token.text.lower())
+        # Simple keyword extraction based on frequency
+        text = text.lower()
+        text = re.sub('[' + string.punctuation + ']', '', text)  # Remove punctuation
+        words = text.split()
+        stopwords = set([
+            "i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours",
+            "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers",
+            "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves",
+            "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are",
+            "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does",
+            "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until",
+            "while", "of", "at", "by", "for", "with", "about", "against", "between", "into",
+            "through", "during", "before", "after", "above", "below", "to", "from", "up", "down",
+            "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here",
+            "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more",
+            "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so",
+            "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now"
+        ])
+        filtered_words = [word for word in words if word not in stopwords]
+        keyword_counts = Counter(filtered_words).most_common(10)
+        keywords = [word for word, count in keyword_counts]
         return keywords
     except Exception as e:
         st.error(f"Error during keyword extraction: {e}")
@@ -218,25 +215,29 @@ def use_app_theme(theme):
 # --- New Feature Functions ---
 
 def extract_named_entities(text):
-    if nlp is None:
-        return []
-    doc = nlp(text)
-    entities = [(ent.text, ent.label_) for ent in doc.ents]
-    return entities
+    return [] # Placeholder, as we're not using spaCy
 
 def analyze_pos_tags(text):
-    if nlp is None:
-        return {}
-    doc = nlp(text)
-    pos_counts = Counter(token.pos_ for token in doc)
-    return pos_counts
+   return {} # Placeholder, as we're not using spaCy
 
 def calculate_stopword_density(text):
-    if nlp is None:
-        return 0.0
-    doc = nlp(text)
-    stopwords = nlp.Defaults.stop_words
-    words = [token.text for token in doc]
+    text = text.lower()
+    text = re.sub('[' + string.punctuation + ']', '', text)  # Remove punctuation
+    words = text.split()
+    stopwords = set([
+        "i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours",
+        "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers",
+        "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves",
+        "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are",
+        "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does",
+        "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until",
+        "while", "of", "at", "by", "for", "with", "about", "against", "between", "into",
+        "through", "during", "before", "after", "above", "below", "to", "from", "up", "down",
+        "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here",
+        "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more",
+        "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so",
+        "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now"
+    ])
     total_words = len(words)
     if total_words == 0:
         return 0.0
@@ -244,80 +245,54 @@ def calculate_stopword_density(text):
     return stopword_count / total_words
 
 def detect_passive_voice(text):
-    if nlp is None:
-       return []
-    doc = nlp(text)
-    passive_sentences = []
-    for sent in doc.sents:
-        for token in sent:
-            if token.dep_ == "auxpass":
-                passive_sentences.append(sent.text)
-                break  # Only detect one passive occurrence per sentence
-    return passive_sentences
+    return []  # Placeholder, requires more complex parsing
 
 def count_pronouns(text):
-    if nlp is None:
-        return {}
-    doc = nlp(text)
-    pronoun_count = Counter(token.lemma_ for token in doc if token.pos_ == "PRON")
+    text = text.lower()
+    words = text.split()
+    pronoun_count = Counter(word for word in words if word in [
+            "i", "me", "my", "mine", "we", "us", "our", "ours",
+            "you", "your", "yours", "he", "him", "his", "she",
+            "her", "hers", "it", "its", "they", "them", "their", "theirs"
+        ])
     return pronoun_count
 
 def count_first_third_person(text):
-    if nlp is None:
-        return (0, 0)
-    doc = nlp(text)
-    first_person = ["I", "me", "my", "mine", "we", "us", "our", "ours"]
-    third_person = ["he", "him", "his", "she", "her", "hers", "it", "its", "they", "them", "their", "theirs"]
-    first_person_count = sum(1 for token in doc if token.lemma_ in first_person)
-    third_person_count = sum(1 for token in doc if token.lemma_ in third_person)
-    return first_person_count, third_person_count
+   text = text.lower()
+   words = text.split()
+   first_person_count = sum(1 for word in words if word in ["i", "me", "my", "mine", "we", "us", "our", "ours"])
+   third_person_count = sum(1 for word in words if word in ["he", "him", "his", "she", "her", "hers", "it", "its"])
+   return first_person_count, third_person_count
 
-def count_keywords(text):
-    if nlp is None:
-       return []
-    doc = nlp(text)
-    stopwords = nlp.Defaults.stop_words
-    words = [token.text.lower() for token in doc if not token.is_punct and not token.is_space]
-    filtered_words = [word for word in words if word not in stopwords]
-    keyword_counts = Counter(filtered_words).most_common(10)
-    return keyword_counts
-
-#Replaced language_tool_python with TextBlob
 def correct_grammar(text):
      return str(TextBlob(text).correct())
 
 def count_transition_words(text):
-    if nlp is None:
-        return 0
-
-    doc = nlp(text)
+    text = text.lower()
+    words = text.split()
     transition_words = ["however", "therefore", "in addition", "moreover", "consequently", "as a result", "for example"]
-    count = sum(1 for token in doc if token.text.lower() in transition_words)
+    count = sum(1 for word in words if word in transition_words)
     return count
 
 # Replaced sumy summarization with a simple extractive summarization
 def summarize_text(text, num_sentences=3):
-    if nlp is None:
-        return ""
-    doc = nlp(text)
-    sentences = [sent.text for sent in doc.sents]  # Extract sentences
-    if not sentences:
-        return ""
+   sentences = re.split(r'[.!?]+', text) # Split by common sentence delimiters
+   sentences = [s.strip() for s in sentences if s.strip()]  # Remove empty strings
 
-    # Calculate sentence scores based on keyword frequency
-    keywords = [word for word, count in count_keywords(text)] # Get top keywords
-    sentence_scores = {}
-    for i, sentence in enumerate(sentences):
+   # Calculate sentence scores based on keyword frequency
+   keywords = extract_keywords(text)
+   sentence_scores = {}
+   for i, sentence in enumerate(sentences):
         sentence_scores[i] = 0
         for word in keywords:
             if word in sentence.lower():
                 sentence_scores[i] += 1
 
-    # Select top N sentences with highest scores
-    top_sentences_idx = nlargest(num_sentences, sentence_scores, key=sentence_scores.get)
-    top_sentences = [sentences[i] for i in sorted(top_sentences_idx)] # Maintain original order
+   # Select top N sentences with highest scores
+   top_sentences_idx = nlargest(num_sentences, sentence_scores, key=sentence_scores.get)
+   top_sentences = [sentences[i] for i in sorted(top_sentences_idx) if i < len(sentences)]  # Check for index validity!
 
-    return " ".join(top_sentences)
+   return " ".join(top_sentences)
 
 # Define the relative path for the logo
 logo_path = "logo.png"
@@ -339,7 +314,7 @@ with st.sidebar:
     st.write("Perform text analysis including sentiment and keyword extraction.")
     st.markdown("---")
     with st.expander("💡 Model Details"):
-        st.write("This app leverages pre-trained transformer models from the Hugging Face Transformers library.")
+        st.write("This app uses basic text processing techniques.")
     st.markdown("---")
     with st.expander("📖 Usage Guide"):
         st.markdown("""
@@ -394,12 +369,10 @@ with tab1:  # Text Analysis
             named_entities = extract_named_entities(text_input)
             pos_counts = analyze_pos_tags(text_input)
             stopword_density = calculate_stopword_density(text_input)
-            readability_score = flesch_reading_ease(text_input)
             passive_sentences = detect_passive_voice(text_input)
             pronoun_counts = count_pronouns(text_input)
             first_person_count, third_person_count = count_first_third_person(text_input)
-            keyword_counts = count_keywords(text_input)
-            # Using TextBlob for grammar correction
+            #keyword_counts = count_keywords(text_input) #not in used and remove it
             corrected_text = correct_grammar(text_input)
             transition_word_count = count_transition_words(text_input)
             text_summary = summarize_text(text_input)
