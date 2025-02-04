@@ -13,6 +13,7 @@ from PIL import Image
 from streamlit_extras.app_logo import add_logo
 from streamlit_option_menu import option_menu
 import os
+import plotly.express as px
 
 # --- Page Settings ---
 st.set_page_config(
