@@ -166,7 +166,7 @@ def analyze_emotions(text):
         return emotions_result
     except Exception as e:
         st.error(f"Error during emotion analysis: {e}")
-        return {"label": "Error", "score": 0.0}
+        return [{"label": "Error", "score": 0.0}]
 
 def extract_keywords(text):
     """Extracts keywords from the given text."""
@@ -393,63 +393,70 @@ def text_analysis_tab(theme):
 def file_upload_tab():
     """Content for the File Upload tab."""
     st.header("File Upload & Batch Processing")
-    uploaded_file = st.file_uploader("Drag & Drop CSV/TXT file here", type=["csv", "txt"], accept_multiple_files=False)
+    if st.button("Clear Analysis"):
+        if 'df' in st.session_state:
+            del st.session_state.df
+    uploaded_files = st.file_uploader("Drag & Drop CSV/TXT files here", type=["csv", "txt"], accept_multiple_files=True)
 
-    if uploaded_file:
-        with st.spinner('Processing the file...'):
-            try:
-                if uploaded_file.name.endswith(".csv"):
-                    df = pd.read_csv(uploaded_file)
-                    if 'text' not in df.columns:
-                        st.error("CSV file must have a 'text' column.", icon="🚨")
-                        st.stop()
-                    texts = df['text'].tolist()
+    if uploaded_files:
+        all_dfs = []
 
-                elif uploaded_file.name.endswith(".txt"):
-                    text_file = uploaded_file.read().decode('utf-8')
-                    texts = [text_file]
-                else:
-                    st.error("Unsupported file type. Please upload a CSV or TXT file.", icon="🚨")
-                    st.stop()
+        for uploaded_file in uploaded_files:
+            with st.spinner(f'Processing the file: {uploaded_file.name}...'):
+                try:
+                    if uploaded_file.name.endswith(".csv"):
+                        df = pd.read_csv(uploaded_file)
+                        if 'text' not in df.columns:
+                            st.error(f"CSV file '{uploaded_file.name}' must have a 'text' column.", icon="🚨")
+                            continue
+                        texts = df['text'].tolist()
 
-                # --- Perform Analysis ---
-                sentiments = []
-                emotions = []
-                keywords_list = []
-                textblob_sentiments = []
-                reading_times = []
-                lexical_diversities = []
-                sentence_counts = []
-                avg_word_lengths = []
+                    elif uploaded_file.name.endswith(".txt"):
+                        text_file = uploaded_file.read().decode('utf-8')
+                        texts = [text_file]
+                        df = pd.DataFrame({'text': texts})
 
-                for text in texts:
-                    sentiments.append(analyze_sentiment(text))
-                    emotions.append(analyze_emotions(text))
-                    keywords_list.append(extract_keywords(text))
-                    textblob_sentiments.append(analyze_textblob_sentiment(text))
-                    reading_times.append(estimate_reading_time(text))
-                    lexical_diversities.append(calculate_lexical_diversity(text))
-                    sentence_counts.append(count_sentences(text))
-                    avg_word_lengths.append(analyze_average_word_length(text))
+                    else:
+                        st.error(f"Unsupported file type: '{uploaded_file.name}'. Please upload a CSV or TXT file.", icon="🚨")
+                        continue
+                        
+                    # --- Perform Analysis ---
+                    sentiments = []
+                    emotions = []
+                    keywords_list = []
+                    textblob_sentiments = []
+                    reading_times = []
+                    lexical_diversities = []
+                    sentence_counts = []
+                    avg_word_lengths = []
 
-                # --- Process TextBlob Analysis ---
-                textblob_polarity = [sentiment[0] for sentiment in textblob_sentiments]
-                textblob_subjectivity = [sentiment[1] for sentiment in textblob_sentiments]
+                    for text in texts:
+                        sentiments.append(analyze_sentiment(text))
+                        emotions.append(analyze_emotions(text))
+                        keywords_list.append(extract_keywords(text))
+                        textblob_sentiments.append(analyze_textblob_sentiment(text))
+                        reading_times.append(estimate_reading_time(text))
+                        lexical_diversities.append(calculate_lexical_diversity(text))
+                        sentence_counts.append(count_sentences(text))
+                        avg_word_lengths.append(analyze_average_word_length(text))
 
-                # --- Process Sentiment Analysis ---
-                sentiment_labels = [sentiment['label'] for sentiment in sentiments]
-                sentiment_scores = [sentiment['score'] for sentiment in sentiments]
+                    # --- Process TextBlob Analysis ---
+                    textblob_polarity = [sentiment[0] for sentiment in textblob_sentiments]
+                    textblob_subjectivity = [sentiment[1] for sentiment in textblob_sentiments]
 
-                # --- Process Emotion Analysis ---
-                emotion_labels = []
-                for emotion_list in emotions:
-                    emotion_labels.append(emotion_list[0]['label'] if emotion_list else 'No Emotion')
-                emotion_scores = []
-                for emotion_list in emotions:
-                    emotion_scores.append(emotion_list[0]['score'] if emotion_list else 0)
+                    # --- Process Sentiment Analysis ---
+                    sentiment_labels = [sentiment['label'] for sentiment in sentiments]
+                    sentiment_scores = [sentiment['score'] for sentiment in sentiments]
 
-                # --- Create DataFrame ---
-                if uploaded_file.name.endswith(".csv"):
+                    # --- Process Emotion Analysis ---
+                    emotion_labels = []
+                    for emotion_list in emotions:
+                        emotion_labels.append(emotion_list[0]['label'] if emotion_list else 'No Emotion')
+                    emotion_scores = []
+                    for emotion_list in emotions:
+                        emotion_scores.append(emotion_list[0]['score'] if emotion_list else 0)
+
+                    # --- Create DataFrame ---
                     df['sentiment'] = sentiment_labels
                     df['sentiment_score'] = sentiment_scores
                     df['emotion'] = emotion_labels
@@ -462,37 +469,23 @@ def file_upload_tab():
                     df['sentence_count'] = sentence_counts
                     df['avg_word_length'] = avg_word_lengths
 
-                elif uploaded_file.name.endswith(".txt"):
-                    df = pd.DataFrame({
-                        'text': texts,
-                        'sentiment': sentiment_labels,
-                        'sentiment_score': sentiment_scores,
-                        'emotion': emotion_labels,
-                        'emotion_score': emotion_scores,
-                        'keywords': [", ".join(keywords) for keywords in keywords_list],
-                        'textblob_polarity': textblob_polarity,
-                        'textblob_subjectivity': textblob_subjectivity,
-                        'reading_time': reading_times,
-                        'lexical_diversity': lexical_diversities,
-                        'sentence_count': sentence_counts,
-                        'avg_word_length': avg_word_lengths
-                    })
+                    all_dfs.append(df)
 
-                st.subheader("Analysis Results")
-                st.dataframe(df, height=300)
+                except Exception as e:
+                    st.error(f"An error occurred during file processing: {uploaded_file.name}: {e}", icon="🚨")
 
-            except Exception as e:
-                st.error(f"An error occurred during file processing: {e}", icon="🚨")
-             # Store the DataFrame in session state
-            st.session_state.df = df
+        if all_dfs:
+            final_df = pd.concat(all_dfs, ignore_index=True)
+            st.subheader("Analysis Results")
+            st.dataframe(final_df, height=300)
+            st.session_state.df = final_df
+        else:
+            st.warning("No files were successfully processed.")
 
 def visualization_tab():
     """Content for the Visualization & Reports tab."""
-
-    uploaded_file = st.session_state.get('df', None)
-
-    if uploaded_file is not None:
-        df = uploaded_file
+    if 'df' in st.session_state:
+        df = st.session_state.df
         st.header("Visualization & Reports")
         col1, col2 = st.columns(2)
         with col1:
@@ -505,25 +498,23 @@ def visualization_tab():
         # Sentiment Distribution Pie Chart
         sentiment_counts = df['sentiment'].value_counts()
         fig_sentiment = px.pie(sentiment_counts, values=sentiment_counts.values, names=sentiment_counts.index,
-                                title="Sentiment Distribution",
-                                color_discrete_sequence=px.colors.sequential.Plasma)  # Cool color scheme
+                               title="Sentiment Distribution",
+                               color_discrete_sequence=px.colors.sequential.Plasma)
         st.plotly_chart(fig_sentiment)
 
         # Emotion Distribution Bar Chart
         emotion_counts = df['emotion'].value_counts()
         fig_emotion = px.bar(emotion_counts, x=emotion_counts.index, y=emotion_counts.values,
                              title="Emotion Distribution",
-                             color_discrete_sequence=px.colors.sequential.Viridis)  # Another color scheme
+                             color_discrete_sequence=px.colors.sequential.Viridis)
         fig_emotion.update_layout(xaxis_title="Emotion", yaxis_title="Count")
         st.plotly_chart(fig_emotion)
 
-        # Reading Time Distribution Histogram (Example)
+        # Reading Time Distribution Histogram
         fig_reading_time = px.histogram(df, x="reading_time", title="Reading Time Distribution",
-                                        color_discrete_sequence=px.colors.sequential.Cividis)  # Distribution Chart for Reading Time
+                                        color_discrete_sequence=px.colors.sequential.Cividis)
         fig_reading_time.update_layout(xaxis_title="Reading Time (minutes)", yaxis_title="Frequency")
         st.plotly_chart(fig_reading_time)
-    elif uploaded_file:
-        st.warning("No data available to visualize. Ensure file processing was successful.")
     else:
         st.info("Upload a file to view visualizations.")
 
